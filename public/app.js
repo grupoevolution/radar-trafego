@@ -599,7 +599,7 @@ async function viewCre() {
     const st = ST[a.state] || ST.healthy;
     return `<div class="card cre"><div class="thumb" style="background-image:${a.thumb_url ? `url('${esc(a.thumb_url)}')` : grad(a.name)}"><span class="tag">${ic('photo')}${a.days_on == null ? '' : a.days_on + 'd no ar'}</span>${a.rank ? `<span class="rank pill">#${a.rank}</span>` : ''}<span class="nm">${esc(a.name)}</span></div>
       <div class="meta"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill p-${st[0]}">${st[1]}</span><span class="faint" style="font-size:11.5px">ROI real <b class="real-v num">${f2(a.roi)}</b></span></div>
-      <div class="mini-stats"><div><b>${pct(a.ctr)}</b><span>CTR</span></div><div><b class="${a.frequency >= 3 ? 'w' : ''}">${nf(a.frequency, 1)}</b><span>Frequência</span></div><div><b>${a.cpa ? brl(a.cpa, 1) : '—'}</b><span>Custo/venda</span></div></div>
+      <div class="mini-stats"><div><b>${pct(a.ctr)}</b><span>CTR</span></div><div><b class="${a.frequency >= 3 ? 'w' : ''}">${nf(a.frequency, 1)}</b><span>Freq.</span></div><div><b>${a.cpa ? brl(a.cpa, 1) : '—'}</b><span>Custo</span></div></div>
       ${spark(a.ctr_series, css(a.fatigue.score >= 55 ? '--warn' : '--good'), 120, 26)}
       <div class="fatigue"><div class="bar"><i style="left:${Math.max(2, Math.min(98, a.fatigue.score))}%"></i></div><div class="lbl"><span>novo</span><span>cansado</span></div></div>
       <div class="faint" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.campaign_name || '')}</div></div></div>`;

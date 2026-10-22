@@ -295,10 +295,10 @@ tr.hl td{background:var(--bad-soft)}
 .dc .r{font-family:var(--f-mono);font-size:12px;text-align:right}
 
 /* criativos */
-.cre-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.cre-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(176px,100%),1fr));gap:12px}
 .cre{overflow:hidden;display:grid;transition:transform .18s,border-color .18s}
 .cre:hover{transform:translateY(-3px);border-color:var(--line-2)}
-.thumb{aspect-ratio:4/5;max-width:100%;position:relative;display:flex;align-items:flex-end;padding:10px;color:#fff;background-size:cover;background-position:center;border-radius:var(--r) var(--r) 0 0}
+.thumb{aspect-ratio:1/1;max-width:100%;position:relative;display:flex;align-items:flex-end;padding:10px;color:#fff;background-size:cover;background-position:center;border-radius:var(--r) var(--r) 0 0}
 .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.6));border-radius:inherit}
 .thumb > *{position:relative;z-index:1}
 .thumb .tag{position:absolute;top:10px;left:10px;font-size:10.5px;font-family:var(--f-mono);background:rgba(6,10,20,.55);backdrop-filter:blur(6px);padding:3px 8px;border-radius:100px;display:inline-flex;gap:5px;align-items:center}
@@ -306,11 +306,12 @@ tr.hl td{background:var(--bad-soft)}
 .thumb .rank{position:absolute;top:10px;right:10px;background:linear-gradient(135deg,var(--nav-b),var(--gold-2));color:#fff;border:0}
 .thumb .rank::before{display:none}
 .thumb .nm{font-family:var(--f-body);font-weight:600;font-size:12px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
-.cre .meta{padding:12px 14px 14px;display:grid;gap:10px}
+.cre .meta{padding:10px 11px 11px;display:grid;gap:7px}
 .mini-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.mini-stats div{display:grid;gap:1px}
-.mini-stats b{font-family:var(--f-mono);font-size:13.5px;font-weight:600}
-.mini-stats span{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+.mini-stats div{display:grid;gap:1px;min-width:0}
+.mini-stats b,.mini-stats span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-stats b{font-family:var(--f-mono);font-size:12px;font-weight:600}
+.mini-stats span{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
 .fatigue{display:grid;gap:5px}
 .fatigue .bar{height:6px;border-radius:6px;background:linear-gradient(90deg,var(--good),var(--warn) 50%,var(--bad));position:relative}
 .fatigue .bar i{position:absolute;top:-4px;width:3px;height:14px;border-radius:2px;background:var(--fg);transform:translateX(-50%);box-shadow:0 0 0 2px var(--surface)}
@@ -424,7 +425,7 @@ tr.hl td{background:var(--bad-soft)}
 .kv b{font-family:var(--f-mono)}
 
 /* ---------- responsivo ---------- */
-@media (max-width:1280px){ .kpi .v{font-size:25px} .spend .big{font-size:46px} .cre-grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:1280px){ .kpi .v{font-size:25px} .spend .big{font-size:46px} }
 @media (max-width:1080px){
   .g-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}
   .g-hero,.g-2,.g-3,.g-rel,.profiles{grid-template-columns:minmax(0,1fr)} .g-4{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -439,7 +440,6 @@ tr.hl td{background:var(--bad-soft)}
   .top{position:static;padding:14px max(16px,env(safe-area-inset-right,0px)) 14px max(16px,env(safe-area-inset-left,0px))}
   .wrap{padding:16px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
   .g-2e{grid-template-columns:minmax(0,1fr)}
-  .cre-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .dc{grid-template-columns:96px minmax(0,1fr) 118px;gap:10px} .dc .r{font-size:11.5px}
   .fr{grid-template-columns:110px minmax(0,1fr) 92px}.fr .yd{display:none}
   .dp-menu{right:auto;left:0;width:min(300px,calc(100vw - 32px))}
@@ -448,7 +448,7 @@ tr.hl td{background:var(--bad-soft)}
   .g-kpi,.g-4,.kpis{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .spend .big{font-size:40px}
   .chain{grid-template-columns:repeat(2,minmax(0,1fr))} .link{border-bottom:1px solid var(--line)} .link:nth-child(2n){border-right:0}.link:nth-child(3){border-right:1px solid var(--line)}
-  .cre-grid{grid-template-columns:minmax(0,1fr)}
+  .cre-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ring-card{grid-template-columns:minmax(0,1fr);justify-items:center}
   .top-right{margin-left:0}
 }
