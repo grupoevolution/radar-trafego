@@ -1,4 +1,4 @@
-/* Radar — app do painel (PC completo + versão de celular). Sem framework. */
+/* Argos — app do painel (PC completo + versão de celular). Sem framework. */
 (function () {
 'use strict';
 
@@ -46,8 +46,10 @@ const I = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
-  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/>'
+  chev: '<path d="M6 9l6 6 6-6"/>'
 };
+const LOGO = '<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#lgA)"/><path d="M8 32 Q32 10 56 32 Q32 54 8 32 Z" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/><circle cx="32" cy="32" r="8.5" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#1D4ED8"/></svg>';
+const GRAD = '<defs><linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--bar-a)"/><stop offset="1" style="stop-color:var(--bar-b)"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--gold);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--gold);stop-opacity:0"/></linearGradient></defs>';
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${I[n] || ''}</svg>`;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf = (v, d = 0) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -142,18 +144,44 @@ function hourChart(hours, upto) {
   const hs = hours.filter(h => h.hour <= upto);
   const max = niceMax(Math.max(10, ...hs.map(h => Math.max(h.revenue, h.fb_revenue, h.spend))));
   const n = 24, bw = (W - p.l - p.r) / n, y = v => H - p.b - (H - p.t - p.b) * v / max;
-  let s = axisY(W, H, p, 0, max, 4, kfmt);
+  let s = GRAD + axisY(W, H, p, 0, max, 4, kfmt);
   hours.forEach((h, i) => {
     const x = p.l + i * bw;
     if (h.hour <= upto) {
       if (h.fb_revenue > 0) s += `<rect x="${x + bw * .16}" y="${y(h.fb_revenue)}" width="${bw * .68}" height="${H - p.b - y(h.fb_revenue)}" rx="3" fill="${css('--face-soft')}" stroke="${css('--face')}" stroke-dasharray="2 2" stroke-width=".8"/>`;
-      if (h.revenue > 0) s += `<rect x="${x + bw * .16}" y="${y(h.revenue)}" width="${bw * .68}" height="${H - p.b - y(h.revenue)}" rx="3" fill="${css('--gold')}"><title>${h.hour}h · faturamento ${brl(h.revenue)} · gasto ${brl(h.spend)}</title></rect>`;
+      if (h.revenue > 0) s += `<rect x="${x + bw * .16}" y="${y(h.revenue)}" width="${bw * .68}" height="${H - p.b - y(h.revenue)}" rx="3" fill="url(#gBar)"><title>${h.hour}h · faturamento ${brl(h.revenue)} · gasto ${brl(h.spend)}</title></rect>`;
     }
     if (i % 3 === 0) s += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${String(h.hour).padStart(2, '0')}h</text>`;
   });
   const pts = hs.map((h, i) => `${p.l + i * bw + bw / 2},${y(h.spend)}`);
   if (pts.length > 1) s += `<polyline points="${pts.join(' ')}" fill="none" stroke="${css('--fg')}" stroke-width="2" stroke-linejoin="round"/>`;
   if (pts.length) { const [lx, ly] = pts[pts.length - 1].split(','); s += `<circle cx="${lx}" cy="${ly}" r="4" fill="${css('--fg')}" stroke="${css('--surface')}" stroke-width="2"/>`; }
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}">${s}</svg>`;
+}
+
+function daysChart(days, goal) {
+  const W = 700, H = 240, p = { l: 48, r: 40, t: 16, b: 26 };
+  if (!days.length) return '<div class="empty">Sem dias nesse período.</div>';
+  const max = niceMax(Math.max(10, ...days.map(d => d.spend)));
+  const live = days.map((d, i) => [i, d]).filter(([, d]) => d.spend > 0);
+  const rmax = Math.ceil((Math.max(goal, 1, ...live.map(([, d]) => d.roi)) + .2) * 5) / 5;
+  const n = days.length, gw = (W - p.l - p.r) / n;
+  const y = v => H - p.b - (H - p.t - p.b) * v / max, yr = v => H - p.b - (H - p.t - p.b) * v / rmax;
+  let s = GRAD + axisY(W, H, p, 0, max, 4, kfmt);
+  for (let i = 1; i <= 3; i++) { const v = rmax * i / 3; s += `<text x="${W - p.r + 6}" y="${yr(v) + 3}">${nf(v, 1)}</text>`; }
+  s += `<line x1="${p.l}" x2="${W - p.r}" y1="${yr(goal)}" y2="${yr(goal)}" stroke="${css('--good')}" stroke-dasharray="4 4"/><text x="${W - p.r - 4}" y="${yr(goal) - 5}" text-anchor="end" style="fill:${css('--good')}">meta ${nf(goal, 1)}</text>`;
+  const step = Math.ceil(n / 10);
+  days.forEach((d, i) => {
+    const x = p.l + i * gw;
+    if (d.spend > 0) s += `<rect x="${x + gw * .2}" y="${y(d.spend)}" width="${gw * .6}" height="${H - p.b - y(d.spend)}" rx="3" fill="url(#gBar)"><title>${dayLabel(d.day)} · gasto ${brl(d.spend)} · ROI real ${f2(d.roi)}</title></rect>`;
+    if (i % step === 0 || i === n - 1) s += `<text x="${x + gw / 2}" y="${H - 8}" text-anchor="middle">${shortDay(d.day)}</text>`;
+  });
+  if (live.length > 1) {
+    const pts = live.map(([i, d]) => [p.l + i * gw + gw / 2, yr(d.roi)]);
+    s += `<path d="M${pts[0][0]},${H - p.b} L${pts.map(q => q.join(',')).join(' L')} L${pts[pts.length - 1][0]},${H - p.b}Z" fill="url(#gArea)"/><polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="${css('--gold')}" stroke-width="2.2" stroke-linejoin="round"/>`;
+    const [lx, ly] = pts[pts.length - 1];
+    s += `<circle cx="${lx}" cy="${ly}" r="9" fill="${css('--gold')}" opacity=".18"/><circle cx="${lx}" cy="${ly}" r="4.5" fill="${css('--gold')}" stroke="${css('--surface')}" stroke-width="2"/>`;
+  }
   return `<svg class="chart" viewBox="0 0 ${W} ${H}">${s}</svg>`;
 }
 
@@ -258,16 +286,16 @@ let ME = null;
 let view = 'geral';
 let mobTab = 'hoje';
 const VIEWS = {
-  geral: ['Visão geral', 'home'], diag: ['O que mudou', 'pulse'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'],
-  escala: ['Escala', 'trend'], contas: ['Contas e perfis', 'tree'], regras: ['Regras', 'bolt'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug']
+  geral: ['Visão geral', 'home'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'], contas: ['Contingência', 'tree'],
+  regras: ['Aprovações', 'check'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug'], diag: ['O que mudou', 'pulse'], escala: ['Escala', 'trend']
 };
-const GROUPS = [['Acompanhar', ['geral', 'diag']], ['Anúncios', ['camp', 'cre', 'escala']], ['Operação', ['contas', 'regras', 'rel', 'int']]];
+const GROUPS = [['Acompanhar', ['geral', 'camp', 'cre']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
 const HASHMAP = { aprovar: ['regras', 'aprovar'], alertas: ['geral', 'alertas'], rel: ['rel', 'rel'] };
 const isMobile = () => window.innerWidth < 760 && store.get('radar-full') !== '1';
 
 function showLogin() {
   $('#root').innerHTML = `<div class="login"><form id="loginF">
-    <div class="brand" style="padding:0"><div class="brand-mark">${ic('radar')}</div><div><b>Radar</b><small>Tráfego Meta</small></div></div>
+    <div class="brand" style="padding:0">${LOGO}<div><b>Argos</b><small>Tráfego Meta</small></div></div>
     <h1>Entrar</h1><p>Use a senha do painel.</p>
     <div class="field"><label for="pw">Senha</label><input id="pw" type="password" autocomplete="current-password" required></div>
     <div class="err" id="loginErr"></div>
@@ -299,13 +327,13 @@ function renderDesk() {
   lastMobile = false;
   $('#root').innerHTML = `<div class="app">
     <aside class="side" aria-label="Menu">
-      <div class="brand"><div class="brand-mark">${ic('radar')}</div><div><b>Radar</b><small>Tráfego Meta</small></div></div>
+      <div class="brand">${LOGO}<div><b>Argos</b><small>Tráfego Meta</small></div></div>
       ${GROUPS.map(([g, ks]) => `<div class="nav-label">${g}</div>` + ks.map(k => `<button class="nav" data-go="${k}" aria-current="${k === view}">${ic(VIEWS[k][1])}${VIEWS[k][0]}${k === 'regras' ? '<span class="count" id="pendCount" hidden></span>' : ''}</button>`).join('')).join('')}
       ${window.innerWidth < 760 ? `<button class="nav" data-act="mobileMode">${ic('phone')}Versão celular</button>` : ''}
       <div class="side-foot">
         <div class="sync" id="syncLine"><span class="dot live"></span>Carregando…</div>
         <button class="linkbtn" data-act="sync">${ic('refresh')}Atualizar agora</button>
-        <button class="linkbtn" data-act="theme">${ic('moon')}Trocar tema</button>
+        <div class="theme-seg" role="group" aria-label="Tema"><button data-act="theme" data-v="dark" aria-pressed="${document.documentElement.dataset.theme !== 'light'}">Escuro</button><button data-act="theme" data-v="light" aria-pressed="${document.documentElement.dataset.theme === 'light'}">Claro</button></div>
         <button class="linkbtn" data-act="logout">${ic('logout')}Sair</button>
       </div>
     </aside>
@@ -314,16 +342,18 @@ function renderDesk() {
   go(view);
 }
 
+let lastGo = null;
 async function go(k) {
   view = k; store.set('radar-view', k);
   $$('.nav').forEach(b => b.setAttribute('aria-current', b.dataset.go === k));
+  if (k !== 'geral') dpOpen = false;
   $('#vTitle').textContent = VIEWS[k][0];
   $('#vSub').textContent = '';
   $('#topRight').innerHTML = ME.demo ? '<span class="demo">Dados de demonstração</span>' : '';
   $('#view').innerHTML = '<div class="loading">Carregando…</div>';
   history.replaceState(null, '', '#' + k);
   window.scrollTo({ top: 0 });
-  try { await RENDER[k](); } catch (err) { if (err.message !== 'Faça login') $('#view').innerHTML = `<div class="empty">${ic('alert')}${esc(err.message)}</div>`; }
+  try { await RENDER[k](); const v = $('#view'); if (v && lastGo !== k) { lastGo = k; v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); setTimeout(() => v.classList.remove('enter'), 900); } } catch (err) { if (err.message !== 'Faça login') $('#view').innerHTML = `<div class="empty">${ic('alert')}${esc(err.message)}</div>`; }
   refreshSide();
 }
 
@@ -338,15 +368,40 @@ const topRight = html => { $('#topRight').innerHTML = (ME.demo ? '<span class="d
 const sub = t => { $('#vSub').textContent = t; };
 
 /* ── VISÃO GERAL ── */
-let ovDay = null;
-async function viewGeral(quiet) {
-  const q = ovDay ? `?day=${ovDay}` : '';
+const PERIODS = [['today', 'Hoje'], ['yesterday', 'Ontem'], ['d7', 'Últimos 7 dias'], ['month', 'Este mês'], ['last', 'Mês passado']];
+let ov = { k: 'today', from: null, to: null };
+let dpOpen = false;
+function perRange(k) {
+  const t = ME.today;
+  if (k === 'today') return [t, t];
+  if (k === 'yesterday') return [yday(), yday()];
+  if (k === 'd7') return [addD(t, -7), addD(t, -1)];
+  if (k === 'month') return [t.slice(0, 8) + '01', t];
+  if (k === 'last') { const end = addD(t.slice(0, 8) + '01', -1); return [end.slice(0, 8) + '01', end]; }
+  return [ov.from, ov.to];
+}
+const spanTxt = (a, b) => a === b ? shortDay(a) : shortDay(a) + ' – ' + shortDay(b);
+function dpHtml() {
+  const [a, b] = perRange(ov.k);
+  const lbl = (PERIODS.find(p => p[0] === ov.k) || [0, 'Personalizado'])[1];
+  return `<div class="dp"><button class="dp-btn" data-act="dpOpen" aria-expanded="${dpOpen}">${ic('calendar')}${lbl}<span class="dp-span">${spanTxt(a, b)}</span>${ic('chev')}</button>
+    ${dpOpen ? `<div class="dp-menu">${PERIODS.map(([k, l]) => { const [x, y] = perRange(k); return `<button class="opt" data-act="dpPick" data-v="${k}" aria-pressed="${ov.k === k}">${l}<span>${spanTxt(x, y)}</span></button>`; }).join('')}
+      <div class="dp-custom"><label>De<input type="date" id="dpFrom" value="${a}" max="${ME.today}"></label><label>Até<input type="date" id="dpTo" value="${b}" max="${ME.today}"></label><button class="btn sm primary" data-act="dpApply">Aplicar datas</button></div></div>` : ''}</div>`;
+}
+const drawDp = () => { const t = $('#topRight'); if (t) t.innerHTML = (ME.demo ? '<span class="demo">Dados de demonstração</span>' : '') + dpHtml(); };
+const roiCls = (r, g) => r >= g ? 'roi-g' : r >= 1.3 ? 'roi-w' : 'roi-b';
+const dNeutral = (cur, prev) => { if (!prev) return ''; const d = (cur - prev) / Math.abs(prev) * 100; return isFinite(d) ? `<span class="delta muted">${d > 0 ? '+' : '−'}${nf(Math.abs(d), 0)}%</span>` : ''; };
+
+async function viewGeral() {
+  const [a, b] = perRange(ov.k);
+  const q = ov.k === 'today' ? '' : a === b ? `?day=${a}` : `?from=${a}&to=${b}`;
   const o = await api('/overview' + q);
+  if (view !== 'geral') return;
   const c = o.cur || {}, p = o.prev || {}, tg = o.targets;
-  sub(o.is_today ? `Hoje, ${dayLabel(o.day)} · até ${String(o.hour).padStart(2, '0')}h · comparando com ${o.prev_label}` : `${dayLabel(o.day)} · comparando com o dia anterior`);
-  topRight(`<div class="seg" role="group" aria-label="Dia"><button aria-pressed="${!ovDay}" data-act="ovday" data-v="">Hoje</button><button aria-pressed="${ovDay === yday()}" data-act="ovday" data-v="${yday()}">Ontem</button></div>
-    <label class="chip">${ic('calendar')}<input type="date" id="ovDate" value="${ovDay || o.day}" max="${ME.today}" aria-label="Escolher dia"></label>`);
-  $('#ovDate').onchange = e => { ovDay = e.target.value === ME.today ? null : e.target.value; viewGeral(); };
+  const lbl = (PERIODS.find(x => x[0] === ov.k) || [0, 'Período'])[1];
+  sub(o.is_range ? `${spanTxt(o.from, o.to)} · ${o.days} dias · comparando com o período anterior` : o.is_today ? `Hoje, ${dayLabel(o.day)} · até ${String(o.hour).padStart(2, '0')}h · comparando com ${o.prev_label}` : `${dayLabel(o.day)} · comparando com o dia anterior`);
+  drawDp();
+  const goal = tg.daily_budget_goal * (o.days || 1);
   const inflated = c.sales ? Math.round((c.fb_purchases / c.sales - 1) * 100) : 0;
   const lost = Math.max(0, Math.round(c.clicks - (c.tagged_visitors || c.visitors)));
   const funnelRows = [
@@ -359,7 +414,7 @@ async function viewGeral(quiet) {
     ['Pagaram o Pix', 'venda real', c.sales, c.pay_rate, p.pay_rate]
   ];
   const mx = Math.log10(Math.max(10, c.impressions || 10));
-  const funnel = `<div class="fr head"><span>Etapa</span><span>Pessoas</span><span style="text-align:right">Passaram</span><span style="text-align:right">${o.is_today ? 'Ontem, mesmo horário' : 'Dia anterior'}</span></div>` +
+  const funnel = `<div class="fr head"><span>Etapa</span><span>Pessoas</span><span style="text-align:right">Passaram</span><span style="text-align:right">${o.is_range ? 'Período anterior' : o.is_today ? 'Ontem, mesmo horário' : 'Dia anterior'}</span></div>` +
     funnelRows.map((r, i) => {
       const alert = i > 0 && r[4] && r[3] < r[4] * 0.85;
       return `<div class="fr${alert ? ' alert' : ''}"><div class="lb">${r[0]}<small>${r[1]}</small></div><div class="bw"><i style="width:${Math.max(3, Math.log10(Math.max(1, r[2])) / mx * 100)}%"></i><b>${nf(r[2])}</b></div><div class="pc">${i ? pct(r[3], 1) : '—'}<small>${i ? 'da etapa anterior' : ''}</small></div><div class="yd">${i && r[4] != null ? pct(r[4], 1) : nf(p.impressions)}</div></div>`;
@@ -373,18 +428,31 @@ async function viewGeral(quiet) {
     ['Ticket médio', brl(c.ticket, 2), brl(p.ticket, 2), delta(c.ticket, p.ticket), sev(c.ticket, p.ticket)]
   ].map(l => `<div class="link ${l[4]}"><span class="lbl">${l[0]}</span><span class="val">${l[1]}</span><span class="was">antes ${l[2]} ${l[3]}</span></div>`).join('');
   const shades = [1, .82, .66, .52, .4, .3, .22, .16];
-  const tot = o.accounts.by_bm.reduce((s, b) => s + b.spend, 0);
-  const share = o.accounts.by_bm.map((b, i) => ({ ...b, pct: div(b.spend, tot) * 100, sh: shades[Math.min(i, shades.length - 1)] }));
+  const tot = o.accounts.by_bm.reduce((s, x) => s + x.spend, 0);
+  const share = o.accounts.by_bm.map((x, i) => ({ ...x, pct: div(x.spend, tot) * 100, sh: shades[Math.min(i, shades.length - 1)] }));
   $('#view').innerHTML = `
-  <div class="grid g-kpi">
-    <div class="card kpi"><span class="eyebrow">Gasto ${o.is_today ? 'hoje' : 'no dia'}</span><div class="v"><small>R$</small>${nf(c.spend)}</div>
-      <div class="meter"><i class="${c.spend > tg.daily_budget_goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, tg.daily_budget_goal) * 100)}%"></i></div><div class="foot">${nf(div(c.spend, tg.daily_budget_goal) * 100)}% da meta de ${brl(tg.daily_budget_goal)}</div></div>
-    <div class="card kpi"><span class="eyebrow">Faturamento real</span><div class="v"><small>R$</small>${nf(c.revenue)}</div><div class="foot">${delta(c.revenue, p.revenue)} vs ${o.prev_label}</div></div>
-    <div class="card kpi hero"><span class="eyebrow">ROI real</span><div class="v">${f2(c.roi)}</div><div class="foot">O Face mostra <span class="ghost">${f2(c.roi_face)}</span> · meta ${nf(tg.roi_goal, 1)}</div></div>
-    <div class="card kpi"><span class="eyebrow">Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${nf(Math.abs(c.profit))}</div><div class="foot">já tirando imposto de ${nf(tg.tax_pct)}% e reembolsos</div></div>
-    <div class="card kpi"><span class="eyebrow">Vendas reais</span><div class="v">${nf(c.sales)}</div><div class="foot">Face conta <span class="ghost">${nf(c.fb_purchases)}</span>${inflated > 3 ? `<span class="delta w">+${inflated}% a mais</span>` : ''}</div></div>
+  <div class="grid g-hero">
+    <div class="hero-wrap"><div class="spend">
+      <span class="eyebrow">Gasto · ${lbl.toLowerCase()}</span>
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span class="big grad-t num">R$ ${nf(c.spend)}</span>${dNeutral(c.spend, p.spend)}<span class="faint" style="font-size:12px">vs ${o.prev_label}</span></div>
+      <div class="bbar" title="Quanto da meta de gasto já foi usado"><i class="${c.spend > goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, goal) * 100)}%"></i></div>
+      <div class="row2"><span>Meta de gasto ${o.is_range ? `(${o.days} dias)` : 'do dia'} <b>${brl(goal)}</b></span><span>Usado <b>${nf(div(c.spend, goal) * 100)}%</b></span><span>${nf(c.clicks)} cliques</span></div>
+    </div></div>
+    <div class="kpis">
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('trend')}</span>ROI real</span><div class="v ${roiCls(c.roi, tg.roi_goal)}">${f2(c.roi)}</div><div class="foot">${delta(c.roi, p.roi)} meta ${nf(tg.roi_goal, 1)} · Face <span class="ghost">${f2(c.roi_face)}</span></div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('card')}</span>Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${nf(Math.abs(c.profit))}</div><div class="foot">já tirando imposto de ${nf(tg.tax_pct)}% e reembolsos</div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('check')}</span>Custo por venda</span><div class="v">${c.cpa ? brl(c.cpa, 2) : '—'}</div><div class="foot">${delta(c.cpa, p.cpa, true)} ${nf(c.sales)} vendas reais${inflated > 3 ? ` · Face conta <span class="ghost">${nf(c.fb_purchases)}</span>` : ''}</div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('andro')}</span>Faturamento real</span><div class="v" style="font-size:22px"><small>R$</small>${nf(c.revenue)}</div><div class="foot">${delta(c.revenue, p.revenue)} detalhes no Andrômeda</div></div>
+    </div>
   </div>
-  ${!ME.app_connected ? `<div class="banner note">${ic('info')}<div><h2 style="font-size:16px">O app de membros ainda não está conectado</h2><p>Sem ele o Radar só mostra o lado do Face. Veja em Conexões.</p></div></div>` : ''}
+  ${!ME.app_connected ? `<div class="banner note">${ic('info')}<div><h2 style="font-size:16px">O app de membros ainda não está conectado</h2><p>Sem ele o Argos só mostra o lado do Face. Veja em Conexões.</p></div></div>` : ''}
+  <div class="grid g-2">
+    ${o.is_range
+      ? `<div class="card"><div class="card-h"><h3>Gasto e ROI real por dia</h3><div class="right legend"><span><i class="sw gold"></i>Gasto</span><span><i class="sw line" style="background:var(--gold)"></i>ROI real</span></div></div><div class="card-b">${daysChart(o.series, tg.roi_goal)}</div></div>`
+      : `<div class="card"><div class="card-h"><h3>Gasto × faturamento por hora</h3><div class="right legend"><span><i class="sw gold"></i>Faturamento real</span><span><i class="sw face"></i>O que o Face diz</span><span><i class="sw line"></i>Gasto</span></div></div><div class="card-b">${hourChart(o.hourly, o.hour)}</div></div>`}
+    <div class="card"><div class="card-h"><h3>Precisa da sua atenção</h3>${o.pending ? `<button class="right btn sm primary" data-go="regras">${o.pending} aprovação${o.pending > 1 ? 'ões' : ''}</button>` : ''}</div>
+      <div class="card-b rows">${o.alerts.length ? o.alerts.map(alertRow).join('') : `<div class="empty">${ic('check')}Nada fora do normal agora.</div>`}</div></div>
+  </div>
   <div class="card"><div class="card-h"><h3>Do anúncio ao Pix pago</h3><span class="hint">Quantas pessoas passaram em cada etapa e quantos % vieram da etapa anterior</span></div>
     <div class="card-b"><div class="fun">${funnel}</div>
       <div class="fun-sum">
@@ -393,16 +461,10 @@ async function viewGeral(quiet) {
         <div><b class="num">${nf(lost)}</b><span>clicaram mas não chegaram no app</span></div>
         <div><b class="num ${c.pix - c.sales > 0 ? 'down' : ''}">${nf(Math.max(0, c.pix - c.sales))}</b><span>geraram Pix e não pagaram</span></div>
       </div></div></div>
-  <div class="grid g-2">
-    <div class="card"><div class="card-h"><h3>Gasto × faturamento por hora</h3><div class="right legend"><span><i class="sw gold"></i>Faturamento real</span><span><i class="sw face"></i>O que o Face diz</span><span><i class="sw line"></i>Gasto</span></div></div>
-      <div class="card-b">${hourChart(o.hourly, o.hour)}</div></div>
-    <div class="card"><div class="card-h"><h3>Precisa da sua atenção</h3>${o.pending ? `<button class="right btn sm" data-go="regras">${o.pending} aprovação${o.pending > 1 ? 'ões' : ''}</button>` : ''}</div>
-      <div class="card-b rows">${o.alerts.length ? o.alerts.map(alertRow).join('') : `<div class="empty">${ic('check')}Nada fora do normal agora.</div>`}</div></div>
-  </div>
   <div class="card"><div class="card-h"><h3>A corrente do resultado</h3><span class="hint">Cada elo comparado com ${o.prev_label}. O elo destacado é onde o dinheiro está vazando.</span></div><div class="card-b"><div class="chain">${chain}</div></div></div>
   <div class="grid g-2">
-    <div class="card"><div class="card-h"><h3>Campanhas que mais deram lucro</h3><button class="right btn sm" data-go="camp">Ver todas</button></div>
-      <div class="card-b tbl-wrap">${o.top.length ? `<table><thead><tr><th>Campanha</th><th>Gasto</th><th>Vendas reais</th><th>ROI real</th><th>Face</th></tr></thead><tbody>${o.top.map(t => `<tr><td class="txt"><div class="cname">${esc(t.name)}<small>${esc(t.account_name || '')} · ${esc(t.bm_name || '')}</small></div></td><td>${brl(t.spend)}</td><td>${nf(t.sales)}</td><td class="real-v">${f2(t.roi)}</td><td class="face-v">${f2(t.roi_face)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nenhuma campanha gastou ainda.</div>'}</div></div>
+    <div class="card"><div class="card-h"><h3>Ranking pelo lucro</h3><button class="right btn sm" data-go="camp">Ver todas</button></div>
+      <div class="card-b tbl-wrap">${o.top.length ? `<table><thead><tr><th>Campanha</th><th>Gasto</th><th>Vendas reais</th><th>ROI real</th><th>Face</th></tr></thead><tbody>${o.top.map((t, i) => `<tr><td class="txt"><div style="display:flex;gap:10px;align-items:center"><span class="rk">${i + 1}</span><div class="cname">${esc(t.name)}<small>${esc(t.account_name || '')} · ${esc(t.bm_name || '')}</small></div></div></td><td>${brl(t.spend)}</td><td>${nf(t.sales)}</td><td class="real-v">${f2(t.roi)}</td><td class="face-v">${f2(t.roi_face)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nenhuma campanha gastou ainda.</div>'}</div></div>
     <div class="card"><div class="card-h"><h3>Contas agora</h3><button class="right btn sm" data-go="contas">Organizar</button></div>
       <div class="card-b" style="display:grid;gap:14px">
         <div class="grid g-3" style="gap:10px">
@@ -410,9 +472,9 @@ async function viewGeral(quiet) {
           <div class="kpi" style="padding:0"><span class="eyebrow">Em análise</span><div class="v w" style="font-size:26px">${o.accounts.review}</div></div>
           <div class="kpi" style="padding:0"><span class="eyebrow">Caíram</span><div class="v down" style="font-size:26px">${o.accounts.down}</div></div>
         </div>
-        <div class="eyebrow">Gasto do dia por BM</div>
-        ${share.length ? `<div class="share-bar">${share.map(b => `<div title="${esc(b.name)} · ${brl(b.spend)}" style="flex:${b.pct};background:color-mix(in srgb,var(--gold) ${b.sh * 100}%,var(--surface-2));${b.sh < .5 ? 'color:var(--fg)' : ''}">${b.pct >= 7 ? nf(b.pct) + '%' : ''}</div>`).join('')}</div>
-        <div class="legend">${share.map(b => `<span><i class="sw" style="background:color-mix(in srgb,var(--gold) ${b.sh * 100}%,var(--surface-2))"></i>${esc(b.name)}</span>`).join('')}</div>` : '<div class="faint">Sem gasto ainda.</div>'}
+        <div class="eyebrow">Gasto ${o.is_range ? 'do período' : 'do dia'} por BM</div>
+        ${share.length ? `<div class="share-bar">${share.map(x => `<div title="${esc(x.name)} · ${brl(x.spend)}" style="flex:${x.pct};background:color-mix(in srgb,var(--gold) ${x.sh * 100}%,var(--surface-2));${x.sh < .5 ? 'color:var(--fg)' : ''}">${x.pct >= 7 ? nf(x.pct) + '%' : ''}</div>`).join('')}</div>
+        <div class="legend">${share.map(x => `<span><i class="sw" style="background:color-mix(in srgb,var(--gold) ${x.sh * 100}%,var(--surface-2))"></i>${esc(x.name)}</span>`).join('')}</div>` : '<div class="faint">Sem gasto ainda.</div>'}
         <div class="row" style="border-top:1px solid var(--line);padding-top:12px">${andromedaRow(o)}</div>
       </div></div>
   </div>`;
@@ -498,7 +560,7 @@ async function viewCamp() {
   const rows = d.rows.filter(r => !cp.active || r.status === 'ACTIVE' || r.spend > 0);
   const isC = cp.level === 'campaign';
   $('#view').innerHTML = `
-  <div class="banner note">${ic('info')}<div><h2 style="font-size:16px">A coluna dourada é a venda que caiu de verdade</h2>
+  <div class="banner note">${ic('info')}<div><h2 style="font-size:16px">A coluna azul é a venda que caiu de verdade</h2>
     <p>Ela vem das vendas reais, ligadas ao anúncio pela etiqueta do link. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Nível"><button aria-pressed="${isC}" data-act="cpLevel" data-v="campaign">Campanhas</button><button aria-pressed="${!isC}" data-act="cpLevel" data-v="ad">Anúncios</button></div>
@@ -518,7 +580,7 @@ async function viewCamp() {
 }
 const addD = (day, n) => { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 function editLocked() {
-  sheet({ title: 'A edição está desligada', body: `<p>Por segurança, o Radar começa só lendo. Quando você confiar nos números, ligue a edição em <b>Conexões → Edição pelo Radar</b>.</p>`, ok: 'Ir pra Conexões', onOk: () => go('int') });
+  sheet({ title: 'A edição está desligada', body: `<p>Por segurança, o Argos começa só lendo. Quando você confiar nos números, ligue a edição em <b>Conexões → Edição pelo Argos</b>.</p>`, ok: 'Ir pra Conexões', onOk: () => go('int') });
 }
 
 /* ── CRIATIVOS ── */
@@ -547,7 +609,7 @@ async function viewCre() {
     <div class="card"><div class="card-h"><h3>Por modelo</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(d.patterns.by_model.slice(0, 5).map((x, i) => [cap(x.key), x.roi, i === 0]), f2, { goal: ME.targets.roi_goal })}</div></div>
     <div class="card"><div class="card-h"><h3>Vida útil das imagens</h3><span class="hint">Em quantos dias cansaram (60 dias)</span></div><div class="card-b">${barsChart(d.patterns.life.map(x => [x.key + ' d', x.n, x.n === Math.max(...d.patterns.life.map(y => y.n)) && x.n > 0]), v => nf(v), { ax: v => nf(v) })}</div></div>
   </div>
-  <p class="faint" style="font-size:12px;margin:0">"Por modelo" lê o nome da campanha: a palavra depois de IMG (ex.: ABO-3CRI-<b>IMG-RAQUEL</b>). Mantendo esse padrão de nome, o Radar agrupa sozinho.</p>`;
+  <p class="faint" style="font-size:12px;margin:0">"Por modelo" lê o nome da campanha: a palavra depois de IMG (ex.: ABO-3CRI-<b>IMG-RAQUEL</b>). Mantendo esse padrão de nome, o Argos agrupa sozinho.</p>`;
 }
 const cap = s => String(s || '').charAt(0) + String(s || '').slice(1).toLowerCase();
 
@@ -562,7 +624,7 @@ async function viewEscala() {
     <div class="eyebrow" style="color:var(--gold)">Seu ponto ideal hoje</div>
     ${ideal ? `<h2>Entre ${brl(ideal.from)} e ${brl(ideal.to)} por dia o ROI fica acima de ${nf(d.goal, 1)}</h2>
       <p>${d.above.n ? `Nos dias acima de ${brl(ideal.to)}, o ROI médio foi ${f2(d.above.roi)}. ` : ''}Acima dessa faixa a oferta atual perde eficiência. Pra escalar além, o que muda o jogo é oferta (ticket, recompra), não só orçamento.</p>`
-      : `<h2>Ainda não dá pra cravar a faixa ideal</h2><p>O Radar precisa de alguns dias com gasto e vendas reais em faixas diferentes de orçamento. Volte em uma ou duas semanas.</p>`}</div></div>
+      : `<h2>Ainda não dá pra cravar a faixa ideal</h2><p>O Argos precisa de alguns dias com gasto e vendas reais em faixas diferentes de orçamento. Volte em uma ou duas semanas.</p>`}</div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><h3>Quanto investiu × ROI real</h3><span class="hint">Cada ponto é um dia</span></div><div class="card-b">${scatterChart(d.days, ideal, d.goal)}</div></div>
     <div class="card"><div class="card-h"><h3>Custo por venda pelo tamanho da campanha</h3><span class="hint">Gasto diário de cada campanha · 30 dias</span></div><div class="card-b">${barsChart(d.buckets.map((b, i) => [b.label, b.cpa, b.cpa && b.cpa === Math.min(...d.buckets.filter(x => x.cpa).map(x => x.cpa))]), v => 'R$' + nf(v, 1), { W: 360, H: 300, l: 44, ax: v => 'R$' + nf(v) })}
@@ -578,7 +640,7 @@ const ACC_ST = s => s === 1 ? ['good', 'Rodando'] : [2, 100, 101, 201, 202].incl
 async function viewContas() {
   const d = await api('/structure');
   ST_DATA = d;
-  sub('Perfis → BMs → contas. Organização e contingência');
+  sub('Perfis → BMs → contas. Arraste uma BM até outro perfil pra mudar quem administra');
   topRight(`<button class="chip" data-act="newProfile">${ic('plus')}Novo perfil</button><button class="chip" data-go="int">${ic('plug')}Conectar BM</button>`);
   const vault = d.profiles.find(p => p.role === 'cofre');
   const ops = d.profiles.filter(p => p.role !== 'cofre');
@@ -592,14 +654,14 @@ async function viewContas() {
       <span class="ad">${ic('card')}<span>${esc(a.card_label || a.funding_label || 'sem cartão anotado')}${a.spend_cap ? ' · limite ' + brl(a.spend_cap) : ''}${a.budget ? ' · orç. ' + brl(a.budget) + '/dia' : ''}</span></span>
       ${dead ? `<span class="sh faint" style="font-size:11.5px">Caiu ${a.status_changed_at ? ago(a.status_changed_at) : ''} · ${brl(a.budget)}/dia pra redistribuir</span>` : `<span class="sh"><span class="meter"><i class="${a.share > ME.targets.max_account_share ? 'hi' : ''}" style="width:${Math.min(100, a.share * 3)}%"></i></span><span class="num faint" style="font-size:11px">${nf(a.share)}% do dia</span></span>`}</button>`;
   };
-  const bmHtml = b => `<div class="bm"><button class="bm-h" data-act="editBm" data-id="${b.id}">${ic('bm')}${esc(b.name)}${b.has_token ? (b.token_ok === false ? '<span class="pill p-bad" style="margin-left:auto">chave parou</span>' : '') : '<span class="pill p-face" style="margin-left:auto">sem chave</span>'}</button>${accsOf(b.id).map(accHtml).join('') || '<span class="faint" style="font-size:12px">Nenhuma conta</span>'}</div>`;
-  const profCard = p => `<div class="card"><div class="prof-h" data-act="editProfile" data-id="${p.id}"><div class="avatar">${esc(initials(p.name))}</div><div><div style="font-weight:600">${esc(p.name)}</div><div class="faint" style="font-size:11.5px">${bmsOf(p.id).length} BMs · ${bmsOf(p.id).reduce((s, b) => s + accsOf(b.id).length, 0)} contas</div></div><span class="pill p-${p.status === 'ativo' ? 'good' : p.status === 'caiu' ? 'bad' : 'warn'}" style="margin-left:auto">${p.status === 'ativo' ? 'Ativo' : p.status === 'caiu' ? 'Caiu' : 'Pediu verificação'}</span></div>${bmsOf(p.id).map(bmHtml).join('') || '<div class="bm faint" style="font-size:12.5px">Nenhuma BM. Toque numa BM e escolha este perfil.</div>'}</div>`;
+  const bmHtml = b => `<div class="bm" draggable="true" data-bm="${b.id}" title="Arraste pra outro perfil"><button class="bm-h" data-act="editBm" data-id="${b.id}">${ic('bm')}${esc(b.name)}${b.has_token ? (b.token_ok === false ? '<span class="pill p-bad" style="margin-left:auto">chave parou</span>' : '') : '<span class="pill p-face" style="margin-left:auto">sem chave</span>'}</button>${accsOf(b.id).map(accHtml).join('') || '<span class="faint" style="font-size:12px">Nenhuma conta</span>'}</div>`;
+  const profCard = p => `<div class="card prof" data-drop="${p.id}"><div class="prof-h" data-act="editProfile" data-id="${p.id}"><div class="avatar">${esc(initials(p.name))}</div><div><div style="font-weight:600">${esc(p.name)}</div><div class="faint" style="font-size:11.5px">${bmsOf(p.id).length} BMs · ${bmsOf(p.id).reduce((s, b) => s + accsOf(b.id).length, 0)} contas</div></div><span class="pill p-${p.status === 'ativo' ? 'good' : p.status === 'caiu' ? 'bad' : 'warn'}" style="margin-left:auto">${p.status === 'ativo' ? 'Ativo' : p.status === 'caiu' ? 'Caiu' : 'Pediu verificação'}</span></div>${bmsOf(p.id).map(bmHtml).join('') || '<div class="bm faint" style="font-size:12.5px">Nenhuma BM. Arraste uma BM pra cá (ou toque nela e escolha este perfil).</div>'}</div>`;
   $('#view').innerHTML = `
   <div class="vault"><div class="ico-box ib-gold">${ic('lock')}</div>
     <div style="flex:1;min-width:200px"><div class="eyebrow">Perfil cofre · não usar pra anunciar</div>${vault ? `<h3>${esc(vault.name)}</h3><div class="muted" style="font-size:12.5px">Admin de todas as ${d.bms.length} BMs${vault.last_used_at ? ' · último uso ' + ago(vault.last_used_at) : ''}</div>` : `<h3>Nenhum perfil cofre ainda</h3><div class="muted" style="font-size:12.5px">Crie um perfil que fica admin de todas as BMs e nunca anuncia.</div>`}</div>
     ${vault ? `<span class="pill p-${vault.status === 'ativo' ? 'good' : 'bad'}">${vault.status === 'ativo' ? 'Seguro' : 'Atenção'}</span><button class="btn sm" data-act="editProfile" data-id="${vault.id}">${ic('edit')}Editar</button>` : `<button class="btn sm primary" data-act="newProfile" data-role="cofre">${ic('plus')}Criar perfil cofre</button>`}
     <button class="btn sm" data-act="fall">${ic('alert')}Uma conta caiu</button></div>
-  ${ops.length || loose.length ? `<div class="profiles">${ops.map(profCard).join('')}${loose.length ? `<div class="card"><div class="prof-h"><div class="avatar">?</div><div><div style="font-weight:600">BMs sem perfil</div><div class="faint" style="font-size:11.5px">Toque na BM pra escolher o perfil</div></div></div>${loose.map(bmHtml).join('')}</div>` : ''}</div>` : `<div class="card"><div class="empty">${ic('tree')}Conecte a primeira BM em Conexões e depois distribua entre os perfis.</div></div>`}
+  ${ops.length || loose.length ? `<div class="profiles">${ops.map(profCard).join('')}${loose.length ? `<div class="card prof" data-drop=""><div class="prof-h"><div class="avatar">?</div><div><div style="font-weight:600">BMs sem perfil</div><div class="faint" style="font-size:11.5px">Arraste a BM até um perfil</div></div></div>${loose.map(bmHtml).join('')}</div>` : ''}</div>` : `<div class="card"><div class="empty">${ic('tree')}Conecte a primeira BM em Conexões e depois distribua entre os perfis.</div></div>`}
   <div class="grid g-2e">
     <div class="card"><div class="card-h"><h3>Segurança da estrutura</h3></div><div class="card-b rows">${d.checks.map(c => `<div class="row"><div class="ico-box ib-${c.ok ? 'good' : 'warn'}">${ic(c.ok ? 'check' : 'alert')}</div><div><div class="t">${esc(c.title)}</div><div class="d">${esc(c.detail)}</div></div></div>`).join('')}</div></div>
     <div class="card"><div class="card-h"><h3>Domínios</h3><span class="hint">Se um domínio for marcado, todas as contas que usam ele caem juntas</span><button class="right btn sm" data-act="newDomain">${ic('plus')}Adicionar</button></div>
@@ -627,10 +689,10 @@ const MODES = [['notify', 'Só avisar'], ['approve', 'Pedir aprovação'], ['aut
 async function viewRegras() {
   const [r, pend, hist] = await Promise.all([api('/rules'), api('/actions?status=pending'), api('/actions')]);
   const g = r.guards;
-  sub('O Radar vigia as campanhas pelo ROI real e pede sua aprovação');
+  sub('O Argos vigia as campanhas pelo ROI real e pede sua aprovação');
   topRight('');
   $('#view').innerHTML = `
-  ${!g.edit_enabled ? `<div class="banner note">${ic('lock')}<div><h2 style="font-size:16px">Edição desligada: as aprovações ficam guardadas</h2><p>As regras já avisam e montam os pedidos. Pra aprovar e o Radar mexer no Face, ligue a edição em Conexões.</p></div></div>` : ''}
+  ${!g.edit_enabled ? `<div class="banner note">${ic('lock')}<div><h2 style="font-size:16px">Edição desligada: as aprovações ficam guardadas</h2><p>As regras já avisam e montam os pedidos. Pra aprovar e o Argos mexer no Face, ligue a edição em Conexões.</p></div></div>` : ''}
   <div class="grid g-2">
     <div class="card"><div class="card-h"><h3>Suas regras</h3><span class="hint">Usam o ROI real, não o do Face</span></div>
       <div style="padding-top:6px">${r.rules.map(x => `<div class="rule">
@@ -641,7 +703,7 @@ async function viewRegras() {
     <div class="card"><div class="card-h"><h3>Esperando sua aprovação</h3><span class="right pill p-${pend.length ? 'warn' : 'good'}">${pend.length}</span></div>
       <div class="card-b" style="display:grid;gap:12px">${pend.length ? pend.map(approveCard).join('') : `<div class="empty">${ic('check')}Nada esperando. As regras estão de olho.</div>`}</div></div>
   </div>
-  <div class="card"><div class="card-h"><h3>Tudo que foi mudado</h3><span class="hint">Pelo Radar, por regra ou por você</span></div>
+  <div class="card"><div class="card-h"><h3>Tudo que foi mudado</h3><span class="hint">Pelo Argos, por regra ou por você</span></div>
     <div class="card-b tbl-wrap">${hist.length ? `<table><thead><tr><th>Quando</th><th>Origem</th><th style="text-align:left">O que</th><th style="text-align:left">Detalhe</th><th>Situação</th><th></th></tr></thead><tbody>${hist.map(h => `<tr><td>${new Date(h.decided_at || h.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</td>
       <td class="txt"><span class="pill ${h.source === 'rule' ? 'p-info' : h.source === 'report' ? 'p-gold' : 'p-face'}">${h.source === 'rule' ? 'Regra' : h.source === 'report' ? 'Relatório' : 'Você'}</span></td>
       <td class="txt l">${actLabel(h)}</td><td class="txt l muted">${esc(h.reason || '')}</td>
@@ -677,9 +739,9 @@ async function viewRel() {
         <div class="card-b tbl-wrap"><table><thead><tr><th>Dia</th><th>Cliques</th><th>Compras</th><th>ROI real</th></tr></thead><tbody>${nums.filter(n => n.spend > 0 || n.sales > 0).map(n => `<tr title="Entraram ${nf(n.visitors)} · conversão ${pct(n.conv, 2)}"><td class="txt">${dayLabel(n.day)}</td><td>${nf(n.clicks)}</td><td>${nf(n.sales)}</td><td><span class="pill p-${n.roi >= ME.targets.roi_goal ? 'good' : n.roi >= 1.3 ? 'gold' : n.roi >= 1.05 ? 'warn' : 'bad'}">${f2(n.roi)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="txt muted">Sem dados ainda</td></tr>'}</tbody></table></div></div>
       <div class="card"><div class="card-h"><h3>Análises anteriores</h3></div><div class="card-b rows">${list.length ? list.map(r => `<button class="row" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;${r.id === repId ? 'color:var(--gold)' : ''}" data-act="openRep" data-id="${r.id}"><div class="ico-box ib-${r.id === repId ? 'gold' : 'face'}">${ic('doc')}</div><div><div class="t">${dayLabel(r.day)}${r.source === 'demo' ? ' · exemplo' : ''}</div><div class="d" style="white-space:normal">${esc(r.title)}</div></div><span class="when">${ic('arrowR')}</span></button>`).join('') : '<div class="faint">Nenhuma ainda.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>Como a análise chega</h3></div><div class="card-b rows">
-        <div class="row"><div class="ico-box ib-gold">${ic('clock')}</div><div><div class="t">Todo dia às 07:00</div><div class="d">O Claude roda sozinho na nuvem, lê o Radar (Face + app + vendas) e escreve a análise</div></div></div>
+        <div class="row"><div class="ico-box ib-gold">${ic('clock')}</div><div><div class="t">Todo dia às 07:00</div><div class="d">O Claude roda sozinho na nuvem, lê o Argos (Face + app + vendas) e escreve a análise</div></div></div>
         <div class="row"><div class="ico-box ib-info">${ic('bell')}</div><div><div class="t">Notificação no celular</div><div class="d">Resumo em uma linha; toque pra abrir aqui</div></div></div>
-        <div class="row"><div class="ico-box ib-good">${ic('check')}</div><div><div class="t">Sugestões viram botão</div><div class="d">Você aprova e o Radar executa no Face (com a edição ligada)</div></div></div></div></div>
+        <div class="row"><div class="ico-box ib-good">${ic('check')}</div><div><div class="t">Sugestões viram botão</div><div class="d">Você aprova e o Argos executa no Face (com a edição ligada)</div></div></div></div></div>
     </div></div>`;
 }
 function reportHtml(r) {
@@ -735,7 +797,7 @@ async function viewInt() {
   <div class="grid g-2e">
     <div class="card"><div class="card-h"><h3>Notificações neste aparelho</h3><span class="hint">${s.push_subs} aparelho${s.push_subs === 1 ? '' : 's'} recebendo</span></div><div class="card-b" style="display:grid;gap:10px">
       <div class="btns"><button class="btn sm primary" data-act="enablePush">${ic('bell')}${push === 'granted' ? 'Reativar neste aparelho' : 'Ativar neste aparelho'}</button><button class="btn sm" data-act="testPush">Mandar teste</button></div>
-      <p class="faint" style="margin:0;font-size:12px">No iPhone: abra o Radar no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra pelo ícone e então ative.</p>
+      <p class="faint" style="margin:0;font-size:12px">No iPhone: abra o Argos no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra pelo ícone e então ative.</p>
       <div>${[['roi_day', 'ROI do dia', `Às ${(n.roi_hours || []).join('h, ')}h`], ['account_down', 'Conta ou BM caiu', 'Na hora'], ['approval', 'Pedido de aprovação', 'Na hora'], ['spend_no_sale', 'Campanha gastou sem vender', 'Na hora'], ['fatigue', 'Criativo cansando', '1× por dia'], ['report', 'Análise da manhã', '07:00']].map(([k, t, d]) => `<div class="nt"><div class="t"><b>${t}</b><span>${d}</span></div><button class="tog" role="switch" aria-checked="${n[k] !== false}" data-act="notifTog" data-k="${k}" aria-label="${t}"></button></div>`).join('')}</div>
       <div class="field"><label for="roiHours">Horários do aviso de ROI (separados por vírgula)</label><input id="roiHours" value="${(n.roi_hours || []).join(', ')}"></div>
       <div class="btns"><button class="btn sm" data-act="saveHours">Salvar horários</button></div>
@@ -751,8 +813,8 @@ async function viewInt() {
       </div>
       <div class="btns"><button class="btn sm primary" data-act="saveTargets">${ic('check')}Salvar metas</button></div></div></div>
   </div>
-  <div class="card"><div class="card-h"><h3>Edição pelo Radar</h3><span class="hint">Etapa 4: ligue quando confiar nos números</span></div><div class="card-b form">
-    <div class="nt"><div class="t"><b>Permitir que o Radar mexa nas campanhas</b><span>Ligar, desligar e mudar orçamento pelo painel e pelas aprovações. A chave da BM precisa da permissão de gerenciar anúncios.</span></div><button class="tog" role="switch" aria-checked="${g.edit_enabled}" data-act="guardTog" data-k="edit_enabled" aria-label="Permitir edição"></button></div>
+  <div class="card"><div class="card-h"><h3>Edição pelo Argos</h3><span class="hint">Etapa 4: ligue quando confiar nos números</span></div><div class="card-b form">
+    <div class="nt"><div class="t"><b>Permitir que o Argos mexa nas campanhas</b><span>Ligar, desligar e mudar orçamento pelo painel e pelas aprovações. A chave da BM precisa da permissão de gerenciar anúncios.</span></div><button class="tog" role="switch" aria-checked="${g.edit_enabled}" data-act="guardTog" data-k="edit_enabled" aria-label="Permitir edição"></button></div>
     <div class="nt"><div class="t"><b>Permitir regras no modo automático</b><span>Sem pedir aprovação. Só use em regras que já se mostraram certas.</span></div><button class="tog" role="switch" aria-checked="${g.auto_enabled}" data-act="guardTog" data-k="auto_enabled" aria-label="Permitir automático"></button></div>
     <div class="form-row">
       <div class="field"><label for="gdPct">Máximo de mudança no orçamento (%)</label><input id="gdPct" type="number" step="1" value="${g.max_change_pct}"></div>
@@ -770,7 +832,7 @@ function connectBmSheet() {
       <ol class="steps">
         <li>Abra <b>business.facebook.com</b> → Configurações do negócio → <b>Usuários do sistema</b> → Adicionar (função: Admin).</li>
         <li>No usuário criado: <b>Atribuir ativos</b> → Contas de anúncios → marque todas as contas dessa BM (controle total).</li>
-        <li><b>Gerar novo token</b> → escolha o app do Radar → validade <b>Nunca</b> → marque <b>ads_read</b> (e <b>ads_management</b> se for usar a edição) e <b>business_management</b>.</li>
+        <li><b>Gerar novo token</b> → escolha o app do Argos → validade <b>Nunca</b> → marque <b>ads_read</b> (e <b>ads_management</b> se for usar a edição) e <b>business_management</b>.</li>
         <li>Copie a chave e cole abaixo.</li>
       </ol>
       <div class="field"><label for="tok">Chave (token) do usuário do sistema</label><textarea id="tok" name="token" placeholder="EAAG..."></textarea></div>
@@ -788,7 +850,7 @@ function connectBmSheet() {
 const MOB = [['hoje', 'home', 'Hoje'], ['aprovar', 'bolt', 'Aprovar'], ['alertas', 'bell', 'Alertas'], ['rel', 'doc', 'Análise']];
 async function renderMobile() {
   lastMobile = true;
-  $('#root').innerHTML = `<div class="mob"><div class="mob-top"><b id="mTitle"></b><div style="display:flex;gap:6px;align-items:center"><span class="sync" style="font-size:11.5px" id="syncLine"></span><button class="chip" data-act="full" aria-label="Versão completa">${ic('monitor')}</button></div></div>
+  $('#root').innerHTML = `<div class="mob"><div class="mob-top"><div class="mt">${LOGO}<b id="mTitle"></b></div><div style="display:flex;gap:6px;align-items:center"><span class="sync" style="font-size:11.5px" id="syncLine"></span><button class="chip" data-act="full" aria-label="Versão completa">${ic('monitor')}</button></div></div>
     <div class="mob-body" id="mBody"><div class="loading">Carregando…</div></div>
     <nav class="mob-nav" id="mNav"></nav></div>`;
   mob(mobTab);
@@ -807,7 +869,8 @@ async function mob(t) {
       const subscribed = 'Notification' in window && Notification.permission === 'granted';
       B.innerHTML = `${ME.demo ? '<span class="demo" style="justify-self:start">Dados de demonstração</span>' : ''}
         ${!subscribed ? `<button class="btn primary block" data-act="enablePush">${ic('bell')}Ativar notificações</button>` : ''}
-        <div class="card ring-card"><div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="10"/><circle cx="60" cy="60" r="50" fill="none" stroke="${c.roi >= o.targets.roi_goal ? 'var(--good)' : c.roi >= 1.1 ? 'var(--gold)' : 'var(--bad)'}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C * fill} ${C}"/></svg><div class="c"><b>${f2(c.roi)}</b><span>ROI real</span></div></div>
+        <div class="hero-wrap"><div class="spend" style="padding:18px 20px;gap:10px"><span class="eyebrow">Gasto hoje · até ${o.hour}h</span><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="big grad-t num" style="font-size:40px">R$ ${nf(c.spend)}</span>${dNeutral(c.spend, p.spend)}</div><div class="bbar"><i class="${c.spend > o.targets.daily_budget_goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, o.targets.daily_budget_goal) * 100)}%"></i></div><div class="row2"><span>Meta do dia <b>${brl(o.targets.daily_budget_goal)}</b></span><span>${nf(c.clicks)} cliques</span></div></div></div>
+        <div class="card ring-card"><div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="10"/><circle cx="60" cy="60" r="50" fill="none" stroke="${c.roi >= o.targets.roi_goal ? 'var(--good)' : c.roi >= 1.1 ? 'var(--gold)' : 'var(--bad)'}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C * fill} ${C}"/></svg><div class="c"><b class="grad-t">${f2(c.roi)}</b><span>ROI real</span></div></div>
           <div class="kv"><div><span class="muted">Gasto</span><b>${brl(c.spend)}</b></div><div><span class="muted">Faturamento</span><b>${brl(c.revenue)}</b></div><div><span class="muted">Lucro no bolso</span><b class="${c.profit < 0 ? 'down' : 'up'}">${brl(c.profit)}</b></div><div><span class="muted">Face diz</span><span class="ghost">ROI ${f2(c.roi_face)}</span></div></div></div>
         <div class="card card-b" style="display:grid;gap:9px"><div class="eyebrow">Funil de hoje · até ${o.hour}h</div>
           ${[['Cliques no Face', c.clicks, null], ['Entraram no app', c.visitors, c.arrival], ['Conversaram', c.chatted, c.chat_rate], ['Clicaram em comprar', c.checkout, c.checkout_rate], ['Geraram Pix', c.pix, c.pix_rate], ['Pagaram', c.sales, c.pay_rate]].map(r => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${r[0]}</span><span class="num"><b>${nf(r[1])}</b> <span class="faint" style="font-size:11.5px;display:inline-block;width:44px;text-align:right">${r[2] == null ? '' : pct(r[2], 0)}</span></span></div>`).join('')}
@@ -841,11 +904,11 @@ async function mob(t) {
 /* ───────────────────────── notificações ───────────────────────── */
 function urlB64(b) { const p = '='.repeat((4 - b.length % 4) % 4); const s = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...s].map(c => c.charCodeAt(0))); }
 async function enablePush() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { toast('Este navegador não aceita notificações. No iPhone, adicione o Radar à Tela de Início primeiro.', true); return; }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { toast('Este navegador não aceita notificações. No iPhone, adicione o Argos à Tela de Início primeiro.', true); return; }
   const reg = await navigator.serviceWorker.register('/sw.js');
   await navigator.serviceWorker.ready;
   const perm = await Notification.requestPermission();
-  if (perm !== 'granted') { toast('Permissão negada. Libere as notificações do Radar nas configurações do navegador.', true); return; }
+  if (perm !== 'granted') { toast('Permissão negada. Libere as notificações do Argos nas configurações do navegador.', true); return; }
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(ME.vapid) });
   await api('/push/subscribe', { body: sub.toJSON() });
@@ -856,9 +919,11 @@ async function enablePush() {
 const reload = () => (isMobile() ? mob(mobTab) : go(view));
 const ACT = {
   async sync(el) { el.disabled = true; toast('Lendo Face e app…'); const r = await api('/sync', { body: {} }); el.disabled = false; toast(r.ok ? 'Atualizado' : (r.error || 'Terminou com avisos'), !r.ok); reload(); },
-  theme() { const r = document.documentElement; const n = r.dataset.theme === 'light' ? 'dark' : 'light'; r.dataset.theme = n; store.set('radar-theme', n); reload(); },
+  theme(el) { const r = document.documentElement; const n = el.dataset.v || (r.dataset.theme === 'light' ? 'dark' : 'light'); r.dataset.theme = n; store.set('radar-theme', n); render(); },
   async logout() { await api('/logout', { body: {} }); showLogin(); },
-  ovday(el) { ovDay = el.dataset.v || null; viewGeral(); },
+  dpOpen() { dpOpen = !dpOpen; drawDp(); },
+  dpPick(el) { ov = { k: el.dataset.v, from: null, to: null }; dpOpen = false; drawDp(); viewGeral(); },
+  dpApply() { let a = $('#dpFrom').value, b = $('#dpTo').value; if (!a || !b) return toast('Escolha as duas datas', true); if (a > b) [a, b] = [b, a]; ov = { k: 'custom', from: a, to: b }; dpOpen = false; drawDp(); viewGeral(); },
   cpPeriod(el) { cp.period = el.dataset.v; viewCamp(); },
   cpLevel(el) { cp.level = el.dataset.v; viewCamp(); },
   cpActive() { cp.active = !cp.active; viewCamp(); },
@@ -907,7 +972,7 @@ const ACT = {
     sheet({ title: esc(b.name), body: `${b.last_error ? `<p class="down">Último erro: ${esc(b.last_error)}</p>` : `<p>Última leitura ${ago(b.last_sync_at)}.</p>`}
       <div class="field"><label for="bN">Nome</label><input id="bN" name="name" value="${esc(b.name)}"></div>
       <div class="field"><label for="bP">Perfil que administra (onde você mexe)</label><select id="bP" name="profile_id"><option value="">Nenhum</option>${ST_DATA.profiles.filter(p => p.role !== 'cofre').map(p => `<option value="${p.id}" ${b.profile_id === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
-      <button class="btn sm danger" type="button" id="delB">${ic('trash')}Remover BM do Radar</button>`,
+      <button class="btn sm danger" type="button" id="delB">${ic('trash')}Remover BM do Argos</button>`,
       ok: 'Salvar', onOk: async v => { await api('/bms/' + b.id, { method: 'PATCH', body: { name: v.name, profile_id: v.profile_id ? +v.profile_id : null } }); go('contas'); } });
     $('#delB').onclick = async () => { await api('/bms/' + b.id, { method: 'DELETE' }); $('#sheet').hidden = true; go('contas'); };
   },
@@ -927,7 +992,7 @@ const ACT = {
       ok: 'Ver pra onde vai o orçamento', onOk: async v => {
         const r = await api('/redistribute/' + encodeURIComponent(v.acc));
         setTimeout(() => sheet({ title: `${esc(r.account.name)} caiu. Pra onde vão os ${brl(r.budget)}/dia?`, noOk: true,
-          body: r.plan.length ? `<p>Sugestão do Radar, priorizando reservas e contas com ROI bom e folga no limite:</p><div class="rows">${r.plan.map(p => `<div class="row"><div class="ico-box ib-${p.reserve ? 'info' : 'good'}">${ic(p.reserve ? 'lock' : 'trend')}</div><div><div class="t num">${esc(p.name)} +${brl(p.add)}/dia</div><div class="d">${p.reserve ? 'Conta reserva: ligar com uma campanha campeã' : 'ROI real 7 dias ' + f2(p.roi)}</div></div></div>`).join('')}</div>${r.uncovered ? `<p class="w">${brl(r.uncovered)}/dia ficam sem lugar: falta conta reserva.</p>` : ''}<p class="faint" style="font-size:12px">Aplique pelas campanhas de cada conta (aba Campanhas).</p>` : '<p>Nenhuma conta com folga e ROI bom agora. Ative uma conta reserva.</p>' }), 50);
+          body: r.plan.length ? `<p>Sugestão do Argos, priorizando reservas e contas com ROI bom e folga no limite:</p><div class="rows">${r.plan.map(p => `<div class="row"><div class="ico-box ib-${p.reserve ? 'info' : 'good'}">${ic(p.reserve ? 'lock' : 'trend')}</div><div><div class="t num">${esc(p.name)} +${brl(p.add)}/dia</div><div class="d">${p.reserve ? 'Conta reserva: ligar com uma campanha campeã' : 'ROI real 7 dias ' + f2(p.roi)}</div></div></div>`).join('')}</div>${r.uncovered ? `<p class="w">${brl(r.uncovered)}/dia ficam sem lugar: falta conta reserva.</p>` : ''}<p class="faint" style="font-size:12px">Aplique pelas campanhas de cada conta (aba Campanhas).</p>` : '<p>Nenhuma conta com folga e ROI bom agora. Ative uma conta reserva.</p>' }), 50);
       } });
   },
   newDomain() { sheet({ title: 'Adicionar domínio', body: `<div class="field"><label for="dD">Domínio</label><input id="dD" name="domain" placeholder="seusite.com.br"></div><div class="field"><label for="dS">Situação</label><select id="dS" name="status"><option value="ok">Em uso</option><option value="reserva">Reserva pronta</option><option value="marcado">Marcado pelo Face</option></select></div>`, ok: 'Adicionar', onOk: async v => { await api('/domains', { body: v }); go('contas'); } }); },
@@ -968,7 +1033,7 @@ const ACT = {
   async guardTog(el) {
     const k = el.dataset.k, on = el.getAttribute('aria-checked') !== 'true';
     const doIt = async () => { await api('/settings/guards', { method: 'PATCH', body: { [k]: on } }); ME = await api('/me'); el.setAttribute('aria-checked', on); toast(on ? 'Ligado' : 'Desligado'); };
-    if (on && k === 'edit_enabled') return sheet({ title: 'Liberar a edição pelo Radar?', body: '<p>A partir de agora, aprovações e os botões de ligar/desligar e orçamento mexem nas campanhas de verdade no Face. Tudo fica no histórico com Desfazer.</p>', ok: 'Liberar edição', onOk: doIt });
+    if (on && k === 'edit_enabled') return sheet({ title: 'Liberar a edição pelo Argos?', body: '<p>A partir de agora, aprovações e os botões de ligar/desligar e orçamento mexem nas campanhas de verdade no Face. Tudo fica no histórico com Desfazer.</p>', ok: 'Liberar edição', onOk: doIt });
     if (on && k === 'auto_enabled') return sheet({ title: 'Permitir o modo automático?', body: '<p>Regras no modo Automático vão agir sem pedir aprovação, respeitando as travas. Você escolhe regra por regra na aba Regras.</p>', ok: 'Permitir', onOk: doIt });
     await doIt();
   },
@@ -982,6 +1047,7 @@ const ACT = {
 const RENDER = { geral: viewGeral, diag: viewDiag, camp: viewCamp, cre: viewCre, escala: viewEscala, contas: viewContas, regras: viewRegras, rel: viewRel, int: viewInt };
 
 document.addEventListener('click', e => {
+  if (dpOpen && !e.target.closest('.dp')) { dpOpen = false; drawDp(); }
   const g = e.target.closest('[data-go]');
   if (g) { e.preventDefault(); if (isMobile()) { store.set('radar-full', '1'); view = g.dataset.go; return render(); } return go(g.dataset.go); }
   const a = e.target.closest('[data-act]');
@@ -991,11 +1057,26 @@ document.addEventListener('click', e => {
   }
 });
 
+// contingência: arrastar a BM até o perfil que administra
+let dragBm = null;
+document.addEventListener('dragstart', e => { const b = e.target.closest && e.target.closest('[data-bm]'); if (!b) return; dragBm = b.dataset.bm; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragBm); } catch (_) {} b.classList.add('dragging'); });
+document.addEventListener('dragend', () => { dragBm = null; $$('.dragging,.prof.drop').forEach(x => x.classList.remove('dragging', 'drop')); });
+document.addEventListener('dragover', e => { const z = dragBm && e.target.closest('[data-drop]'); if (!z) return; e.preventDefault(); $$('.prof.drop').forEach(x => x !== z && x.classList.remove('drop')); z.classList.add('drop'); });
+document.addEventListener('drop', async e => {
+  const z = dragBm && e.target.closest('[data-drop]'); if (!z) return;
+  e.preventDefault();
+  const id = +dragBm, pid = z.dataset.drop ? +z.dataset.drop : null;
+  const b = ST_DATA && ST_DATA.bms.find(x => x.id === id);
+  if (!b || (b.profile_id || null) === pid) return;
+  try { await api('/bms/' + id, { method: 'PATCH', body: { name: b.name, profile_id: pid } }); toast(`${b.name} agora está com ${pid ? ST_DATA.profiles.find(p => p.id === pid).name : 'nenhum perfil'}`); go('contas'); }
+  catch (err) { toast(err.message, true); }
+});
+
 // atualiza a tela de hoje sozinha a cada 2 minutos
 setInterval(() => {
   if (document.hidden || !ME || !$('#sheet').hidden) return;
   if (isMobile() && mobTab === 'hoje') mob('hoje');
-  else if (!isMobile() && view === 'geral' && !ovDay) viewGeral().catch(() => {});
+  else if (!isMobile() && view === 'geral' && ov.k === 'today' && !dpOpen) viewGeral().catch(() => {});
 }, 120000);
 
 boot();

@@ -61,21 +61,36 @@ router.get('/me', wrap(async (req, res) => {
 }));
 
 // ── VISÃO GERAL ──────────────────────────────────────────────────────────
+// ?day=AAAA-MM-DD → um dia (hoje compara com ontem no mesmo horário)
+// ?from=…&to=…   → período (soma os dias e compara com o período anterior do mesmo tamanho)
 router.get('/overview', wrap(async (req, res) => {
   const today = T.today();
-  const day = dayParam(req.query.day, today);
-  const isToday = day === today;
+  let from = dayParam(req.query.from, null), to = dayParam(req.query.to, null);
+  if (from && to && from > to) [from, to] = [to, from];
+  if (to && to > today) to = today;
+  const isRange = !!(from && to && from !== to);
+  const day = isRange ? to : dayParam(req.query.day || from, today);
+  if (!isRange) from = to = day;
+  const isToday = !isRange && day === today;
   const hour = isToday ? T.parts().hour : 23;
-  const [cur] = await metrics.daySeries(day, day);
-  const prevDay = T.addDays(day, -1);
-  const prev = isToday ? await metrics.dayUntil(prevDay, hour) : (await metrics.daySeries(prevDay, prevDay))[0];
-  const hourly = await metrics.hourly(day);
-  const camps = (await metrics.objectRows('campaign', day, day)).filter(c => c.spend > 0).sort((a, b) => (b.revenue - b.spend) - (a.revenue - a.spend));
+  let cur, prev, series = null, hourly = null;
+  if (isRange) {
+    const len = T.daysBetween(from, to) + 1;
+    series = await metrics.daySeries(from, to);
+    cur = await metrics.sumDays(series);
+    prev = await metrics.sumDays(await metrics.daySeries(T.addDays(from, -len), T.addDays(from, -1)));
+  } else {
+    [cur] = await metrics.daySeries(day, day);
+    const prevDay = T.addDays(day, -1);
+    prev = isToday ? await metrics.dayUntil(prevDay, hour) : (await metrics.daySeries(prevDay, prevDay))[0];
+    hourly = await metrics.hourly(day);
+  }
+  const camps = (await metrics.objectRows('campaign', from, to)).filter(c => c.spend > 0).sort((a, b) => (b.revenue - b.spend) - (a.revenue - a.spend));
   const { rows: alerts } = await db.query(`SELECT * FROM alerts WHERE created_at > NOW() - INTERVAL '36 hours' ORDER BY (severity='bad') DESC, created_at DESC LIMIT 6`);
   const { rows: accs } = await db.query(`
     SELECT a.id, a.name, a.account_status, a.is_reserve, b.name AS bm, COALESCE(f.spend,0)::float spend
     FROM ad_accounts a LEFT JOIN bms b ON b.id = a.bm_id
-    LEFT JOIN fb_daily f ON f.level='account' AND f.object_id = a.id AND f.day = $1`, [day]);
+    LEFT JOIN (SELECT object_id, SUM(spend) spend FROM fb_daily WHERE level='account' AND day BETWEEN $1 AND $2 GROUP BY object_id) f ON f.object_id = a.id`, [from, to]);
   const byBm = {};
   for (const a of accs) byBm[a.bm || 'Sem BM'] = (byBm[a.bm || 'Sem BM'] || 0) + a.spend;
   const { rows: and } = await db.query('SELECT * FROM andromeda_log ORDER BY sent_at DESC LIMIT 1');
@@ -83,8 +98,9 @@ router.get('/overview', wrap(async (req, res) => {
   const { rows: sync } = await db.query(`SELECT * FROM sync_log ORDER BY created_at DESC LIMIT 1`);
   const s = await settings.all();
   res.json({
-    day, is_today: isToday, hour, prev_label: isToday ? `ontem até ${hour}h` : 'dia anterior',
-    cur, prev, hourly, top: camps.slice(0, 5),
+    day, from, to, is_range: isRange, days: T.daysBetween(from, to) + 1, is_today: isToday, hour,
+    prev_label: isRange ? 'período anterior' : isToday ? `ontem até ${hour}h` : 'dia anterior',
+    cur, prev, hourly, series, top: camps.slice(0, 5),
     alerts, pending: pend[0].n,
     accounts: {
       running: accs.filter(a => a.account_status === 1 && !a.is_reserve).length,
@@ -409,7 +425,7 @@ router.post('/bms/connect', wrap(async (req, res) => {
     out.push({ bm: g.name, accounts: g.accs.map(a => a.name) });
   }
   collector.collect().catch(() => {});
-  res.json({ ok: true, user: me.name, bms: out, warning: DEMO() ? 'O Radar está em modo demonstração: desligue DEMO_MODE pra ver os dados reais.' : null });
+  res.json({ ok: true, user: me.name, bms: out, warning: DEMO() ? 'O Argos está em modo demonstração: desligue DEMO_MODE pra ver os dados reais.' : null });
 }));
 
 // ── REGRAS E APROVAÇÕES ──────────────────────────────────────────────────
@@ -509,7 +525,7 @@ router.post('/push/subscribe', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 router.post('/push/test', wrap(async (req, res) => {
-  const n = await notify.push(null, 'Radar conectado', 'As notificações estão funcionando neste aparelho.', '/');
+  const n = await notify.push(null, 'Argos conectado', 'As notificações estão funcionando neste aparelho.', '/');
   res.json({ ok: true, sent: n });
 }));
 

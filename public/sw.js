@@ -3,8 +3,8 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', e => {
   let d = {};
-  try { d = e.data.json(); } catch (_) { d = { title: 'Radar', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Radar', {
+  try { d = e.data.json(); } catch (_) { d = { title: 'Argos', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Argos', {
     body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', data: { url: d.url || '/' }
   }));
 });

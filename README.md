@@ -1,6 +1,6 @@
-# Radar — painel de tráfego (Meta)
+# Argos — painel de tráfego (Meta)
 
-Sistema separado do app de membros. Lê todas as BMs do Facebook, cruza com as
+Sistema separado do app de membros (antes chamado Radar). Lê todas as BMs do Facebook, cruza com as
 vendas reais do app (Kirvano) e mostra o resultado de verdade: ROI real por
 dia, por campanha e por anúncio, o funil do anúncio até o Pix pago, criativos
 cansando, teto de escala, organização das contas (contingência), regras com
