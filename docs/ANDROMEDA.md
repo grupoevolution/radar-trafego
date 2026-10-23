@@ -12,7 +12,7 @@ contas somadas). Nada de campanha, conta ou métrica.
 ## Como
 
 ```
-POST <endereço que o Andrômeda criar>
+POST https://<endereço do Andrômeda>/api/argos/gasto
 Content-Type: application/json
 X-Radar-Secret: <senha combinada>
 
@@ -34,3 +34,12 @@ X-Radar-Secret: <senha combinada>
 
 No Radar: **Conexões → Andrômeda** → endereço + senha → Ligado → Salvar →
 "Enviar agora" pra testar. A lista abaixo mostra cada envio e se deu certo.
+
+
+## Pronto (23/10/2026)
+
+O Andrômeda já tem a rota (v5.12.0). No EasyPanel do Andrômeda crie a variável
+`ARGOS_SECRET` (um texto qualquer, longo). No Argos → Conexões → Andrômeda:
+endereço `https://<andromeda>/api/argos/gasto`, a mesma senha, ligado.
+Editar o gasto à mão no Andrômeda continua valendo: se o dia foi mexido à mão,
+o Argos não sobrescreve; apagar o dia (0) devolve pro automático.
