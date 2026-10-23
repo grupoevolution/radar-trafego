@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const db = require('./db');
@@ -29,8 +30,18 @@ async function boot() {
   });
 
   app.use('/api', api);
-  app.use(express.static(path.join(__dirname, 'public'), { index: 'index.html', maxAge: 0 }));
-  app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+  // cada deploy gera uma versão nova dos arquivos: o celular (PWA) nunca fica preso numa cópia velha
+  const BUILD = Date.now().toString(36);
+  const sendIndex = (req, res) => {
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.type('html').send(fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8').replace(/\?v=\w+/g, '?v=' + BUILD));
+  };
+  app.get(['/', '/index.html'], sendIndex);
+  app.use(express.static(path.join(__dirname, 'public'), {
+    index: false,
+    setHeaders: (res, p) => { if (/\.(js|css|html|json)$/.test(p)) res.set('Cache-Control', 'no-cache'); }
+  }));
+  app.get('*', sendIndex);
 
   app.use((err, req, res, next) => {
     console.error('[server]', err.message);

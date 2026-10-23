@@ -339,7 +339,7 @@ function renderDesk() {
         <button class="linkbtn" data-act="logout">${ic('logout')}Sair</button>
       </div>
     </aside>
-    <main><header class="top"><div><h1 id="vTitle"></h1><div class="sub" id="vSub"></div></div><div class="top-right" id="topRight"></div></header>
+    <main><header class="top"><div><h1 id="vTitle"></h1><div class="sub" id="vSub"></div></div><div class="top-right" id="topRight"></div><button class="btn sm refresh" data-act="sync" title="Ler o Face e o app agora">${ic('refresh')}Atualizar agora</button></header>
       <div class="wrap"><section class="view" id="view"></section></div></main></div>`;
   go(view);
 }
@@ -482,7 +482,7 @@ async function viewGeral() {
   <div class="card"><div class="card-h"><h3>A corrente do resultado</h3><span class="hint">Cada elo comparado com ${o.prev_label}. O elo destacado é onde o dinheiro está vazando.</span></div><div class="card-b"><div class="chain">${chain}</div></div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><h3>Ranking pelo lucro</h3><button class="right btn sm" data-go="camp">Ver todas</button></div>
-      <div class="card-b tbl-wrap">${o.top.length ? `<table><thead><tr><th>Campanha</th><th>Gasto</th><th>Vendas reais</th><th>ROI real</th><th>Face</th></tr></thead><tbody>${o.top.map((t, i) => `<tr><td class="txt"><div style="display:flex;gap:10px;align-items:center"><span class="rk">${i + 1}</span><div class="cname">${esc(t.name)}<small>${esc(t.account_name || '')} · ${esc(t.bm_name || '')}</small></div></div></td><td>${brl(t.spend)}</td><td>${nf(t.sales)}</td><td class="real-v">${f2(t.roi)}</td><td class="face-v">${f2(t.roi_face)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nenhuma campanha gastou ainda.</div>'}</div></div>
+      <div class="card-b tbl-wrap">${o.top.length ? `<table><thead><tr><th>Campanha</th><th>Gasto</th><th>Vendas reais</th><th>ROI real</th><th>Face</th></tr></thead><tbody>${o.top.map((t, i) => `<tr><td class="txt"><div style="display:flex;gap:10px;align-items:center"><span class="rk">${i + 1}</span><div class="cname">${esc(t.name)}<small>${t.bm_name ? `<span class="bm-tag">${esc(t.bm_name)}</span>` : ''}${esc(t.account_name || '')}</small></div></div></td><td>${brl(t.spend)}</td><td>${nf(t.sales)}</td><td class="real-v">${f2(t.roi)}</td><td class="face-v">${f2(t.roi_face)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nenhuma campanha gastou ainda.</div>'}</div></div>
     <div class="card"><div class="card-h"><h3>Contas agora</h3><button class="right btn sm" data-go="contas">Organizar</button></div>
       <div class="card-b" style="display:grid;gap:14px">
         <div class="grid g-3" style="gap:10px">
@@ -656,7 +656,7 @@ async function viewCamp() {
     <span class="faint" style="font-size:12.5px;margin-left:auto">${rows.length} ${isC ? 'campanhas' : 'anúncios'} · ordenado por gasto</span>
   </div>
   <div class="card"><div class="tbl-wrap">${rows.length ? `<table><thead><tr><th>${isC ? 'Campanha' : 'Anúncio'}</th><th>Ligada</th><th>No ar há</th>${isC ? '<th>Orçamento/dia</th>' : ''}<th>Gasto</th><th>CPM</th><th>CTR</th><th>Freq.</th><th>Vendas Face</th><th>Vendas reais</th><th>Custo/venda real</th><th>ROI real</th><th style="text-align:left">7 dias</th><th>Sinal</th></tr></thead><tbody>
-    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}"><td class="txt"><div class="cname">${esc(c.name)}<small>${esc(isC ? (c.account_name || '') + ' · ' + (c.bm_name || '') : c.campaign_name || '')}</small></div></td>
+    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}"><td class="txt"><div class="cname">${esc(c.name)}<small>${c.bm_name ? `<span class="bm-tag">${esc(c.bm_name)}</span>` : ''}${esc(isC ? (c.account_name || '') : (c.account_name || '') + ' · ' + (c.campaign_name || ''))}</small></div></td>
       <td><button class="tog" role="switch" aria-checked="${c.status === 'ACTIVE'}" data-act="tog" data-i="${i}" aria-label="Ligar ou desligar ${esc(c.name)}"></button></td>
       <td class="${c.days_on >= 12 ? 'w' : ''}">${c.days_on == null ? '—' : c.days_on + (c.days_on === 1 ? ' dia' : ' dias')}</td>
       ${isC ? `<td>${c.budget ? `<button class="budget" data-act="bud" data-i="${i}">${brl(c.budget)} ${ic('edit')}</button>` : '<span class="faint">—</span>'}</td>` : ''}
@@ -888,7 +888,7 @@ async function viewInt() {
     <div class="card"><div class="card-h"><h3>Notificações neste aparelho</h3><span class="hint">${s.push_subs} aparelho${s.push_subs === 1 ? '' : 's'} recebendo</span></div><div class="card-b" style="display:grid;gap:10px">
       <div class="btns"><button class="btn sm primary" data-act="enablePush">${ic('bell')}${push === 'granted' ? 'Reativar neste aparelho' : 'Ativar neste aparelho'}</button><button class="btn sm" data-act="testPush">Mandar teste</button></div>
       <p class="faint" style="margin:0;font-size:12px">No iPhone: abra o Argos no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra pelo ícone e então ative.</p>
-      <div>${[['roi_day', 'ROI do dia', `Às ${(n.roi_hours || []).join('h, ')}h`], ['account_down', 'Conta ou BM caiu', 'Na hora'], ['approval', 'Pedido de aprovação', 'Na hora'], ['spend_no_sale', 'Campanha gastou sem vender', 'Na hora'], ['fatigue', 'Criativo cansando', '1× por dia'], ['report', 'Análise da manhã', '07:00']].map(([k, t, d]) => `<div class="nt"><div class="t"><b>${t}</b><span>${d}</span></div><button class="tog" role="switch" aria-checked="${n[k] !== false}" data-act="notifTog" data-k="${k}" aria-label="${t}"></button></div>`).join('')}</div>
+      <div>${[['roi_day', 'ROI do dia', `Às ${(n.roi_hours || []).join('h, ')}h`], ['account_down', 'Conta ou BM caiu', 'Até 15 min'], ['ad_rejected', 'Anúncio reprovado ou conjunto com erro', 'Até 15 min'], ['approval', 'Pedido de aprovação', 'Na hora'], ['spend_no_sale', 'Campanha gastou sem vender', 'Na hora'], ['fatigue', 'Criativo cansando', '1× por dia'], ['report', 'Análise da manhã', '07:00']].map(([k, t, d]) => `<div class="nt"><div class="t"><b>${t}</b><span>${d}</span></div><button class="tog" role="switch" aria-checked="${n[k] !== false}" data-act="notifTog" data-k="${k}" aria-label="${t}"></button></div>`).join('')}</div>
       <div class="field"><label for="roiHours">Horários do aviso de ROI (separados por vírgula)</label><input id="roiHours" value="${(n.roi_hours || []).join(', ')}"></div>
       <div class="btns"><button class="btn sm" data-act="saveHours">Salvar horários</button></div>
     </div></div>
@@ -940,7 +940,7 @@ function connectBmSheet() {
 const MOB = [['hoje', 'home', 'Hoje'], ['aprovar', 'bolt', 'Aprovar'], ['alertas', 'bell', 'Alertas'], ['rel', 'doc', 'Análise']];
 async function renderMobile() {
   lastMobile = true;
-  $('#root').innerHTML = `<div class="mob"><div class="mob-top"><div class="mt">${LOGO}<b id="mTitle"></b></div><div style="display:flex;gap:6px;align-items:center"><span class="sync" style="font-size:11.5px" id="syncLine"></span><button class="chip" data-act="full" aria-label="Versão completa">${ic('monitor')}</button></div></div>
+  $('#root').innerHTML = `<div class="mob"><div class="mob-top"><div class="mt">${LOGO}<b id="mTitle"></b></div><div style="display:flex;gap:6px;align-items:center"><span class="sync" style="font-size:11.5px" id="syncLine"></span><button class="chip" data-act="sync" aria-label="Atualizar agora">${ic('refresh')}</button><button class="chip" data-act="full" aria-label="Versão completa">${ic('monitor')}</button></div></div>
     <div class="mob-body" id="mBody"><div class="loading">Carregando…</div></div>
     <nav class="mob-nav" id="mNav"></nav></div>`;
   mob(mobTab);
@@ -1008,7 +1008,7 @@ async function enablePush() {
 /* ───────────────────────── ações (cliques) ───────────────────────── */
 const reload = () => (isMobile() ? mob(mobTab) : go(view));
 const ACT = {
-  async sync(el) { el.disabled = true; toast('Lendo Face e app…'); const r = await api('/sync', { body: {} }); el.disabled = false; toast(r.ok ? 'Atualizado' : (r.error || 'Terminou com avisos'), !r.ok); reload(); },
+  async sync(el) { el.disabled = true; el.classList.add('spin'); toast('Lendo Face e app… leva uns segundos'); const r = await api('/sync', { body: {} }).finally(() => { el.disabled = false; el.classList.remove('spin'); }); toast(r.ok ? 'Atualizado' : (r.error || 'Terminou com avisos'), !r.ok); reload(); },
   theme(el) { const r = document.documentElement; const n = el.dataset.v || (r.dataset.theme === 'light' ? 'dark' : 'light'); r.dataset.theme = n; store.set('radar-theme', n); render(); },
   async logout() { await api('/logout', { body: {} }); showLogin(); },
   editGoals() {
