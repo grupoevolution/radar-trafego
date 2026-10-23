@@ -309,6 +309,22 @@ function showLogin() {
   setTimeout(() => $('#pw') && $('#pw').focus(), 50);
 }
 
+/* ── barra fixa de avisos graves (conta caiu, anúncio reprovado, chave parou) ── */
+let AB = [], abOpen = false;
+const abSeen = () => Number(store.get('argos-alert-seen')) || 0;
+async function loadAlertBar() { try { AB = await api('/alerts/active'); } catch (e) { return; } drawAlertBar(); }
+function drawAlertBar() {
+  const el = $('#alertbar');
+  const fresh = AB.filter(a => a.id > abSeen());
+  if (!fresh.length) { el.hidden = true; document.documentElement.style.setProperty('--abh', '0px'); return; }
+  const ago = t => { const m = Math.max(1, Math.round((Date.now() - new Date(t)) / 60000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };
+  el.hidden = false;
+  el.innerHTML = `<div class="in">${ic('alert')}<span class="t"><b>${esc(fresh[0].title)}</b> <small style="opacity:.8">${ago(fresh[0].created_at)}</small>${fresh.length > 1 ? `<span class="more">+${fresh.length - 1}</span>` : ''}</span>
+    ${fresh.length > 1 || fresh[0].detail ? `<button data-act="abToggle" aria-expanded="${abOpen}">${abOpen ? 'Esconder' : 'Ver todos'}</button>` : ''}<button data-act="abOk">Ciente</button>
+    ${abOpen ? `<div class="list">${fresh.map(a => `<div><b>${esc(a.title)}</b><small>${ago(a.created_at)}</small>${a.detail ? `<br>${esc(a.detail)}` : ''}</div>`).join('')}</div>` : ''}</div>`;
+  document.documentElement.style.setProperty('--abh', el.offsetHeight + 'px');
+}
+
 async function boot() {
   try { ME = await api('/me'); } catch (e) { return; }
   await loadBms();
@@ -318,6 +334,7 @@ async function boot() {
   else if (VIEWS[h]) view = h;
   else { const s = store.get('radar-view'); if (s && VIEWS[s]) view = s; }
   render();
+  loadAlertBar(); setInterval(loadAlertBar, 2 * 60 * 1000);
 }
 
 function render() { if (isMobile()) renderMobile(); else renderDesk(); }
@@ -672,34 +689,87 @@ function editLocked() {
 }
 
 /* ── CRIATIVOS ── */
-let crFilter = 'all';
-const ST = { champion: ['gold', 'Campeão'], healthy: ['good', 'Saudável'], tiring: ['warn', 'Cansando'], saturated: ['bad', 'Saturado'], new: ['info', 'Novo'], off: ['face', 'Desligado'] };
+let crFilter = 'all', crSort = 'sales', crDays = 14, crOpen = null, crData = null;
+const ST = { good: ['good', 'Vendendo'], falling: ['warn', 'Caindo'], stopped: ['bad', 'Parou de vender'], new: ['info', 'Novo'], off: ['face', 'Desligada'] };
+const roiCol = (r, g) => r == null ? '' : r >= g ? 'var(--good)' : r >= 1.3 ? 'var(--warn)' : 'var(--bad)';
+const thumbBg = x => { if (x.thumb) return `url('${esc(x.thumb)}')`; let h = 0; for (const c of x.key) h = (h * 31 + c.charCodeAt(0)) % 360; return `radial-gradient(120% 80% at 30% 20%, hsl(${h} 45% 58%), hsl(${(h + 40) % 360} 35% 20%))`; };
+// linha azul = vendas/dia, ciano = ROI real do dia, tracejada verde = meta
+function creChart(series, goal, W = 300, H = 84) {
+  const p = { l: 4, r: 4, t: 8, b: 6 }, n = series.length;
+  const xs = i => p.l + (W - p.l - p.r) * i / Math.max(1, n - 1);
+  const ms = Math.max(3, ...series.map(x => x.sales));
+  const ys = v => H - p.b - (H - p.t - p.b) * v / ms;
+  const mr = Math.max(goal * 1.8, 3);
+  const yr = v => H - p.b - (H - p.t - p.b) * Math.min(v, mr) / mr;
+  const hasRoi = series.some(x => x.roi != null && x.spend > 0);
+  const ln = (pts, c, w, o = 1) => `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" opacity="${o}" vector-effect="non-scaling-stroke"/>`;
+  let s = hasRoi ? `<line x1="${p.l}" x2="${W - p.r}" y1="${yr(goal)}" y2="${yr(goal)}" stroke="var(--good)" stroke-dasharray="4 4" opacity=".6" vector-effect="non-scaling-stroke"/>` : '';
+  s += ln(series.map((x, i) => `${xs(i)},${ys(x.sales)}`).join(' '), 'var(--gold)', 2.2);
+  if (hasRoi) s += ln(series.map((x, i) => x.spend > 0 ? `${xs(i)},${yr(x.roi)}` : null).filter(Boolean).join(' '), 'var(--gold-2)', 1.7, .9);
+  const L = series[n - 1];
+  s += `<circle cx="${xs(n - 1)}" cy="${ys(L.sales)}" r="3.2" fill="var(--gold)"/>`;
+  return `<svg class="cre-ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Vendas${hasRoi ? ' e ROI' : ''} por dia">${s}</svg>`;
+}
 async function viewCre() {
-  const d = await api('/creatives' + bmQ('?'));
-  sub(`Últimos 7 dias · só contas ativas · ranking ${d.rank_by === 'real' ? 'pelo ROI real (vendas com etiqueta)' : 'pelo custo por compra do Face e CTR (sem etiqueta ainda)'}`);
+  const [d, pt] = await Promise.all([api(`/creatives/images?days=${crDays}` + bmQ('&')), api('/creatives' + bmQ('?')).catch(() => null)]);
+  crData = d;
+  const real = d.by === 'real', goal = d.roi_goal || ME.targets.roi_goal;
+  sub(`Cada cartão é uma imagem, somando todas as campanhas e contas onde ela roda · ${real ? 'vendas reais (etiqueta)' : 'compras que o Face conta (sem etiqueta ainda)'}`);
   topRight(bmPicker());
-  const ads = d.ads.filter(a => crFilter === 'all' ? a.status === 'ACTIVE' || a.spend > 0 : crFilter === 'rank' ? a.rank : crFilter === 'champ' ? a.state === 'champion' : ['tiring', 'saturated'].includes(a.state));
-  const grad = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `radial-gradient(120% 80% at 30% 20%, hsl(${h} 45% 58%), hsl(${(h + 40) % 360} 35% 20%))`; };
+  let list = d.images.slice();
+  if (crSort === 'roi') list.sort((a, b) => (b.roi || 0) - (a.roi || 0) || b.sales - a.sales);
+  if (crSort === 'spend') list.sort((a, b) => b.spend - a.spend);
+  if (crFilter !== 'all') list = list.filter(x => x.state === crFilter);
+  const all = d.images, tot = all.reduce((s, x) => s + x.sales, 0), sp = all.reduce((s, x) => s + x.spend, 0), rv = all.reduce((s, x) => s + x.revenue, 0);
+  const open = crOpen && all.find(x => x.key === crOpen);
   $('#view').innerHTML = `
   ${bmNote()}
-  <div class="toolbar"><div class="seg" role="group" aria-label="Filtro">${[['all', 'Todos'], ['rank', 'Ranking'], ['champ', 'Top 3'], ['tired', 'Cansando']].map(([k, l]) => `<button aria-pressed="${crFilter === k}" data-act="crFilter" data-v="${k}">${l}</button>`).join('')}</div>
-    <span class="muted" style="font-size:12.5px">Entra no ranking quem gastou ${brl(d.min_spend)}+ nos 7 dias · cansaço = frequência subindo + CTR caindo</span></div>
-  ${ads.length ? `<div class="cre-grid">${ads.map(a => {
-    const st = ST[a.state] || ST.healthy;
-    return `<div class="card cre"><div class="thumb" style="background-image:${a.thumb_url ? `url('${esc(a.thumb_url)}')` : grad(a.name)}"><span class="tag">${ic('photo')}${a.days_on == null ? '' : a.days_on + 'd no ar'}</span>${a.rank ? `<span class="rank pill">#${a.rank}</span>` : ''}<span class="nm">${esc(a.name)}</span></div>
-      <div class="meta"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill p-${st[0]}">${st[1]}</span><span class="faint num" style="font-size:11.5px">${brl(a.spend)}</span></div>
-      <div class="mini-stats"><div><b>${pct(a.ctr)}</b><span>CTR</span></div><div><b>${a.sales ? nf(a.sales) : nf(a.fb_purchases)}</b><span>${a.sales ? 'Vendas' : 'Compras Face'}</span></div><div><b>${a.sales ? brl(a.cpa, 1) : a.cpa_face ? brl(a.cpa_face, 1) : '—'}</b><span>Custo/compra</span></div></div>
-      ${a.sales ? `<div class="faint" style="font-size:11.5px">ROI real <b class="real-v num">${f2(a.roi)}</b> · freq. ${nf(a.frequency, 1)}</div>` : `<div class="faint" style="font-size:11.5px">CPC ${brl(a.cpc, 2)} · freq. <span class="${a.frequency >= 3 ? 'w' : ''}">${nf(a.frequency, 1)}</span></div>`}
-      ${spark(a.ctr_series, css(a.fatigue.score >= 55 ? '--warn' : '--good'), 120, 26)}
-      <div class="fatigue"><div class="bar"><i style="left:${Math.max(2, Math.min(98, a.fatigue.score))}%"></i></div><div class="lbl"><span>novo</span><span>cansado</span></div></div>
-      <div class="faint" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.campaign_name || '')} · ${esc(a.bm_name || '')}</div></div></div>`;
-  }).join('')}</div>` : `<div class="card"><div class="empty">${ic('image')}Nenhum criativo nesse filtro.</div></div>`}
-  <div class="grid g-3">
-    <div class="card"><div class="card-h"><h3>Imagens por campanha</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(d.patterns.by_count.map(x => [x.key, x.roi, x.roi === Math.max(...d.patterns.by_count.map(y => y.roi))]), f2, { goal: ME.targets.roi_goal })}</div></div>
-    <div class="card"><div class="card-h"><h3>Por modelo</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(d.patterns.by_model.slice(0, 5).map((x, i) => [cap(x.key), x.roi, i === 0]), f2, { goal: ME.targets.roi_goal })}</div></div>
-    <div class="card"><div class="card-h"><h3>Vida útil das imagens</h3><span class="hint">Em quantos dias cansaram (60 dias)</span></div><div class="card-b">${barsChart(d.patterns.life.map(x => [x.key + ' d', x.n, x.n === Math.max(...d.patterns.life.map(y => y.n)) && x.n > 0]), v => nf(v), { ax: v => nf(v) })}</div></div>
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Período">${[7, 14, 30].map(n => `<button aria-pressed="${crDays === n}" data-act="crDays" data-v="${n}">${n} dias</button>`).join('')}</div>
+    <div class="seg" role="group" aria-label="Ordenar">${[['sales', 'Mais vendas'], ['roi', 'Maior ROI'], ['spend', 'Mais gasto']].map(([k, l]) => `<button aria-pressed="${crSort === k}" data-act="crSort" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="seg" role="group" aria-label="Situação">${[['all', 'Todas'], ['good', 'Vendendo'], ['falling', 'Caindo'], ['stopped', 'Parou'], ['new', 'Novas'], ['off', 'Desligadas']].map(([k, l]) => `<button aria-pressed="${crFilter === k}" data-act="crFilter" data-v="${k}">${l}</button>`).join('')}</div>
   </div>
-  <p class="faint" style="font-size:12px;margin:0">"Por modelo" lê o nome da campanha: a palavra depois de IMG (ex.: ABO-3CRI-<b>IMG-RAQUEL</b>). Mantendo esse padrão de nome, o Argos agrupa sozinho.</p>`;
+  <div class="grid g-4">
+    <div class="card kpi"><span class="eyebrow">Imagens no ar</span><b class="v num">${nf(all.filter(x => x.active).length)}</b></div>
+    <div class="card kpi"><span class="eyebrow">${real ? 'Vendas' : 'Compras Face'} · ${d.days} dias</span><b class="v num">${nf(tot)}</b></div>
+    <div class="card kpi"><span class="eyebrow">ROI real</span><b class="v num" style="color:${roiCol(real ? div(rv, sp * (1 + (ME.targets.tax_pct ?? 12.15) / 100)) : null, goal)}">${real ? f2(div(rv, sp * (1 + (ME.targets.tax_pct ?? 12.15) / 100))) : '—'}</b></div>
+    <div class="card kpi"><span class="eyebrow">Pararam de vender</span><b class="v num" style="color:var(--bad)">${nf(all.filter(x => x.state === 'stopped').length)}</b></div>
+  </div>
+  ${open ? creDetail(open, real, goal) : ''}
+  ${list.length ? `<div class="cre2-grid">${list.map(x => {
+    const st = ST[x.state] || ST.good;
+    return `<button class="card cre2 ${open === x ? 'sel' : ''}" data-act="crOpen" data-v="${esc(x.key)}" aria-label="Ver campanhas desta imagem">
+      <div class="c2-top"><div class="c2-img" style="background-image:${thumbBg(x)}">${x.rank ? `<span class="rk">#${x.rank}</span>` : ''}</div>
+        <div class="c2-meta"><b class="c2-nm">${esc(x.name)}</b><span class="pill p-${st[0]}">${st[1]}</span>
+          <span class="c2-w"><b class="num">${x.campaigns}</b> ${x.campaigns === 1 ? 'campanha' : 'campanhas'} · <b class="num">${x.bms.length}</b> ${x.bms.length === 1 ? 'BM' : 'BMs'}</span>
+          <span class="c2-w">No ar há <b class="num">${x.days_on}</b> ${x.days_on === 1 ? 'dia' : 'dias'}</span></div></div>
+      <div class="c2-k"><div><small>${real ? 'Vendas' : 'Compras'}</small><b>${nf(x.sales)}</b></div><div><small>ROI</small><b style="color:${roiCol(x.roi, goal)}">${x.roi == null ? '—' : f2(x.roi)}</b></div><div><small>Gasto</small><b>${brl(x.spend)}</b></div><div><small>Custo/venda</small><b>${x.cpa ? brl(x.cpa, 2) : '—'}</b></div></div>
+      <div class="c2-ch">${creChart(x.series, goal)}</div>
+    </button>`;
+  }).join('')}</div>` : `<div class="card"><div class="empty">${ic('image')}Nenhuma imagem nesse filtro.</div></div>`}
+  <p class="faint" style="font-size:12px;margin:0">Linha azul = ${real ? 'vendas' : 'compras'} por dia · ciano = ROI real do dia · tracejada verde = meta (${f2(goal)}). "Caindo" = vendendo bem menos por real gasto nos últimos 3 dias; "Parou" = gastou nos últimos 3 dias e não vendeu.${d.ungrouped ? ` ${d.ungrouped} anúncio(s) ainda sem a impressão digital da imagem aparecem sozinhos até a próxima leitura completa.` : ''}</p>
+  ${pt ? `<div class="grid g-3">
+    <div class="card"><div class="card-h"><h3>Imagens por campanha</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(pt.patterns.by_count.map(x => [x.key, x.roi, x.roi === Math.max(...pt.patterns.by_count.map(y => y.roi))]), f2, { goal })}</div></div>
+    <div class="card"><div class="card-h"><h3>Por modelo</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(pt.patterns.by_model.slice(0, 5).map((x, i) => [cap(x.key), x.roi, i === 0]), f2, { goal })}</div></div>
+    <div class="card"><div class="card-h"><h3>Vida útil das imagens</h3><span class="hint">Em quantos dias cansaram (60 dias)</span></div><div class="card-b">${barsChart(pt.patterns.life.map(x => [x.key + ' d', x.n, x.n === Math.max(...pt.patterns.life.map(y => y.n)) && x.n > 0]), v => nf(v), { ax: v => nf(v) })}</div></div>
+  </div>` : ''}`;
+}
+function creDetail(x, real, goal) {
+  const st = ST[x.state] || ST.good;
+  const good = x.camps.filter(c => c.roi >= goal && c.spend > 0).length, withSpend = x.camps.filter(c => c.spend > 0).length;
+  const tip = !real ? 'Sem vendas com etiqueta ainda: o resultado por campanha usa as compras que o Face conta.'
+    : withSpend < 2 ? 'Está em uma campanha só. Se ela estiver vendendo, vale testar a mesma imagem em outra campanha ou conta.'
+    : good * 2 >= withSpend ? `Vende bem na maioria das campanhas (${good} de ${withSpend}). Boa candidata pra duplicar em conta nova.`
+    : `Só vai bem em ${good} de ${withSpend} campanhas. Quando o problema é a campanha e não a foto, vale testar a mesma imagem em outra estrutura.`;
+  return `<div class="card cre-dt"><div class="dt-h"><div class="c2-img" style="background-image:${thumbBg(x)};width:96px"></div>
+      <div style="flex:1;min-width:200px;display:grid;gap:6px"><h3 style="margin:0">${esc(x.name)}</h3><span class="pill p-${st[0]}">${st[1]}</span>
+        <span class="c2-w">No ar há <b class="num">${x.days_on}</b> dias · ${x.ads} anúncio(s) · CTR <b class="num">${pct(x.ctr)}</b> · ${nf(x.sales)} ${real ? 'vendas' : 'compras'} · ROI <b class="num" style="color:${roiCol(x.roi, goal)}">${x.roi == null ? '—' : f2(x.roi)}</b></span></div>
+      <button class="btn sm" data-act="crOpen" data-v="">${ic('x')}Fechar</button></div>
+    <div class="banner note">${ic('info')}<div><p style="margin:0">${tip}</p></div></div>
+    <div class="dt-ch">${creChart(x.series, goal, 900, 150)}<div class="dt-ax"><span>${shortDay(x.series[0].day)}</span><span>${shortDay(x.series[x.series.length - 1].day)}</span></div></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Campanha</th><th>Gasto</th><th>${real ? 'Vendas' : 'Compras'}</th><th>ROI real</th><th>Situação</th></tr></thead><tbody>
+      ${x.camps.map(c => `<tr><td class="txt"><span class="bm-tag">${esc(c.bm || '—')}</span>${esc(c.name || c.id)}<div class="faint" style="font-size:11.5px">${esc(c.account || '')}</div></td><td class="num">${brl(c.spend)}</td><td class="num">${nf(c.sales)}</td><td class="num" style="color:${real ? roiCol(c.roi, goal) : ''}">${real ? f2(c.roi) : '—'}</td><td>${c.on ? 'Ligada' : 'Desligada'}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
 }
 const cap = s => String(s || '').charAt(0) + String(s || '').slice(1).toLowerCase();
 
@@ -1033,6 +1103,11 @@ const ACT = {
   cpLevel(el) { cp.level = el.dataset.v; viewCamp(); },
   cpActive() { cp.active = !cp.active; viewCamp(); },
   crFilter(el) { crFilter = el.dataset.v; viewCre(); },
+  abToggle() { abOpen = !abOpen; drawAlertBar(); },
+  abOk() { store.set('argos-alert-seen', Math.max(...AB.map(a => a.id))); abOpen = false; drawAlertBar(); },
+  crSort(el) { crSort = el.dataset.v; viewCre(); },
+  crDays(el) { crDays = Number(el.dataset.v); viewCre(); },
+  crOpen(el) { crOpen = el.dataset.v && el.dataset.v !== crOpen ? el.dataset.v : null; viewCre().then(() => { if (crOpen) { const d = $('.cre-dt'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }); },
   tog(el) {
     const c = campRows[+el.dataset.i];
     if (!campGuards.edit_enabled) return editLocked();

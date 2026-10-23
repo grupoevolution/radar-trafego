@@ -485,3 +485,43 @@ tr.hl td{background:var(--bad-soft)}
 .top .refresh{margin-left:4px}
 .spin svg{animation:spinI .8s linear infinite}
 @keyframes spinI{to{transform:rotate(360deg)}}
+
+/* criativos por imagem */
+.cre2-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:12px}
+.cre2{display:grid;padding:0;text-align:left;overflow:hidden;transition:transform .18s,border-color .18s;cursor:pointer}
+.cre2:hover{transform:translateY(-2px);border-color:var(--line-2)}
+.cre2.sel{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.c2-top{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;padding:12px}
+.c2-img{aspect-ratio:4/5;border-radius:10px;background-size:cover;background-position:center;position:relative;background-color:var(--surface-2)}
+.c2-img .rk{position:absolute;top:5px;left:5px;background:linear-gradient(135deg,var(--nav-b),var(--gold-2));color:#fff;font-family:var(--f-mono);font-size:11px;font-weight:600;border-radius:7px;padding:1px 6px}
+.c2-meta{display:grid;gap:6px;align-content:start;min-width:0}
+.c2-meta .pill{justify-self:start}
+.c2-nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2-w{font-size:12px;color:var(--muted)}
+.c2-w b{color:var(--fg);font-weight:600}
+.c2-k{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line)}
+.c2-k div{padding:8px 10px;border-right:1px solid var(--line);min-width:0}
+.c2-k div:last-child{border-right:0}
+.c2-k small{display:block;font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2-k b{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+.c2-ch{padding:6px 10px 10px;border-top:1px solid var(--line)}
+.cre-ch{display:block;width:100%;height:70px}
+.cre-dt{padding:16px;display:grid;gap:14px;border-color:var(--line-2)}
+.dt-h{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.dt-ch .cre-ch{height:140px}
+.dt-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);font-family:var(--f-mono);margin-top:4px}
+
+/* barra fixa de avisos graves */
+.alertbar{position:fixed;top:0;left:0;right:0;z-index:40;background:linear-gradient(90deg,#7F1D3A,#9D2449);color:#fff;padding:9px 16px;padding-top:max(9px,env(safe-area-inset-top));font-size:13px}
+.alertbar .in{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.alertbar .i{width:16px;height:16px}
+.alertbar .t{flex:1;min-width:180px}
+.alertbar .more{background:rgba(255,255,255,.18);border-radius:100px;padding:1px 8px;font-size:11.5px;font-weight:600;margin-left:6px}
+.alertbar button{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;border-radius:100px;padding:4px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.alertbar .list{flex-basis:100%;display:grid;gap:5px;margin-top:4px}
+.alertbar .list div{background:rgba(0,0,0,.2);border-radius:9px;padding:6px 10px;font-size:12.5px}
+.alertbar .list small{opacity:.75;margin-left:6px}
+body{padding-top:var(--abh,0px)}
+.side{top:var(--abh,0px);height:calc(100vh - var(--abh,0px))}
+.top{top:calc(env(safe-area-inset-top,0px) + var(--abh,0px))}
+.mob{padding-top:max(env(safe-area-inset-top,0px) - var(--abh,0px),0px)}
