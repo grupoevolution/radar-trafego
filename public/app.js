@@ -46,7 +46,8 @@ const I = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
-  chev: '<path d="M6 9l6 6 6-6"/>'
+  chev: '<path d="M6 9l6 6 6-6"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2.5 4L16 12H5"/>'
 };
 const LOGO = '<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#lgA)"/><path d="M8 32 Q32 10 56 32 Q32 54 8 32 Z" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/><circle cx="32" cy="32" r="8.5" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#1D4ED8"/></svg>';
 const GRAD = '<defs><linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--bar-a)"/><stop offset="1" style="stop-color:var(--bar-b)"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--gold);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--gold);stop-opacity:0"/></linearGradient></defs>';
@@ -286,10 +287,10 @@ let ME = null;
 let view = 'geral';
 let mobTab = 'hoje';
 const VIEWS = {
-  geral: ['Visão geral', 'home'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'], contas: ['Contingência', 'tree'],
+  geral: ['Visão geral', 'home'], metas: ['Metas', 'flag'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'], contas: ['Contingência', 'tree'],
   regras: ['Aprovações', 'check'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug'], diag: ['O que mudou', 'pulse'], escala: ['Escala', 'trend']
 };
-const GROUPS = [['Acompanhar', ['geral', 'camp', 'cre']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
+const GROUPS = [['Acompanhar', ['geral', 'metas', 'camp', 'cre']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
 const HASHMAP = { aprovar: ['regras', 'aprovar'], alertas: ['geral', 'alertas'], rel: ['rel', 'rel'] };
 const isMobile = () => window.innerWidth < 760 && store.get('radar-full') !== '1';
 
@@ -310,6 +311,7 @@ function showLogin() {
 
 async function boot() {
   try { ME = await api('/me'); } catch (e) { return; }
+  await loadBms();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   const h = location.hash.replace('#', '');
   if (HASHMAP[h]) { view = HASHMAP[h][0]; mobTab = HASHMAP[h][1] === 'rel' ? 'rel' : HASHMAP[h][1] === 'aprovar' ? 'aprovar' : HASHMAP[h][1] === 'alertas' ? 'alertas' : 'hoje'; }
@@ -367,6 +369,18 @@ async function refreshSide() {
 const topRight = html => { $('#topRight').innerHTML = (ME.demo ? '<span class="demo">Dados de demonstração</span>' : '') + html; };
 const sub = t => { $('#vSub').textContent = t; };
 
+/* ── filtro de BM (lembrado entre as telas) ── */
+let BMS_LIST = [];
+let bmSel = store.get('radar-bm') || '';
+const bmQ = sep => (bmSel ? `${sep}bm=${bmSel}` : '');
+const bmName = () => { const b = BMS_LIST.find(x => String(x.id) === String(bmSel)); return b ? b.name : ''; };
+async function loadBms() { try { BMS_LIST = await api('/bms/list'); } catch (e) { BMS_LIST = []; } if (bmSel && !BMS_LIST.some(b => String(b.id) === String(bmSel))) { bmSel = ''; store.set('radar-bm', ''); } }
+function bmPicker() {
+  if (BMS_LIST.length < 2) return '';
+  return `<label class="chip bm-pick">${ic('bm')}<select data-bmsel aria-label="Filtrar por BM"><option value="">Todas as BMs</option>${BMS_LIST.map(b => `<option value="${b.id}" ${String(b.id) === String(bmSel) ? 'selected' : ''}>${esc(b.name)}${b.active ? '' : ' · sem conta ativa'}</option>`).join('')}</select></label>`;
+}
+const bmNote = () => bmSel ? `<div class="banner note">${ic('info')}<div><h2 style="font-size:15px">Vendo só a ${esc(bmName())}</h2><p>O gasto e os números do Face são só dessa BM. As vendas por BM contam apenas as que vieram com etiqueta no link (campanhas novas); o funil do app não tem como ser dividido por BM.</p></div></div>` : '';
+
 /* ── VISÃO GERAL ── */
 const PERIODS = [['today', 'Hoje'], ['yesterday', 'Ontem'], ['d7', 'Últimos 7 dias'], ['month', 'Este mês'], ['last', 'Mês passado']];
 let ov = { k: 'today', from: null, to: null };
@@ -388,20 +402,21 @@ function dpHtml() {
     ${dpOpen ? `<div class="dp-menu">${PERIODS.map(([k, l]) => { const [x, y] = perRange(k); return `<button class="opt" data-act="dpPick" data-v="${k}" aria-pressed="${ov.k === k}">${l}<span>${spanTxt(x, y)}</span></button>`; }).join('')}
       <div class="dp-custom"><label>De<input type="date" id="dpFrom" value="${a}" max="${ME.today}"></label><label>Até<input type="date" id="dpTo" value="${b}" max="${ME.today}"></label><button class="btn sm primary" data-act="dpApply">Aplicar datas</button></div></div>` : ''}</div>`;
 }
-const drawDp = () => { const t = $('#topRight'); if (t) t.innerHTML = (ME.demo ? '<span class="demo">Dados de demonstração</span>' : '') + dpHtml(); };
+const drawDp = () => { const t = $('#topRight'); if (t) t.innerHTML = (ME.demo ? '<span class="demo">Dados de demonstração</span>' : '') + bmPicker() + dpHtml(); };
 const roiCls = (r, g) => r >= g ? 'roi-g' : r >= 1.3 ? 'roi-w' : 'roi-b';
 const dNeutral = (cur, prev) => { if (!prev) return ''; const d = (cur - prev) / Math.abs(prev) * 100; return isFinite(d) ? `<span class="delta muted">${d > 0 ? '+' : '−'}${nf(Math.abs(d), 0)}%</span>` : ''; };
 
 async function viewGeral() {
   const [a, b] = perRange(ov.k);
-  const q = ov.k === 'today' ? '' : a === b ? `?day=${a}` : `?from=${a}&to=${b}`;
+  const q = (ov.k === 'today' ? '?' : a === b ? `?day=${a}&` : `?from=${a}&to=${b}&`) + bmQ('');
   const o = await api('/overview' + q);
   if (view !== 'geral') return;
   const c = o.cur || {}, p = o.prev || {}, tg = o.targets;
   const lbl = (PERIODS.find(x => x[0] === ov.k) || [0, 'Período'])[1];
   sub(o.is_range ? `${spanTxt(o.from, o.to)} · ${o.days} dias · comparando com o período anterior` : o.is_today ? `Hoje, ${dayLabel(o.day)} · até ${String(o.hour).padStart(2, '0')}h · comparando com ${o.prev_label}` : `${dayLabel(o.day)} · comparando com o dia anterior`);
   drawDp();
-  const goal = tg.daily_budget_goal * (o.days || 1);
+  const goal = o.budget_goal || tg.daily_budget_goal * (o.days || 1);
+  const taxPct = Number(tg.tax_pct) || 0;
   const inflated = c.sales ? Math.round((c.fb_purchases / c.sales - 1) * 100) : 0;
   const lost = Math.max(0, Math.round(c.clicks - (c.tagged_visitors || c.visitors)));
   const funnelRows = [
@@ -433,19 +448,22 @@ async function viewGeral() {
   $('#view').innerHTML = `
   <div class="grid g-hero">
     <div class="hero-wrap"><div class="spend">
-      <span class="eyebrow">Gasto · ${lbl.toLowerCase()}</span>
+      <span class="eyebrow">Gasto · ${lbl.toLowerCase()}${bmSel ? ' · ' + esc(bmName()) : ''}</span>
       <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span class="big grad-t num">R$ ${nf(c.spend)}</span>${dNeutral(c.spend, p.spend)}<span class="faint" style="font-size:12px">vs ${o.prev_label}</span></div>
-      <div class="bbar" title="Quanto da meta de gasto já foi usado"><i class="${c.spend > goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, goal) * 100)}%"></i></div>
-      <div class="row2"><span>Meta de gasto ${o.is_range ? `(${o.days} dias)` : 'do dia'} <b>${brl(goal)}</b></span><span>Usado <b>${nf(div(c.spend, goal) * 100)}%</b></span><span>${nf(c.clicks)} cliques</span></div>
+      <div class="tax-line"><span>Com imposto (${nf(taxPct, 2)}%)</span><b class="num">${brl(c.cost, 2)}</b><span class="faint">é esse valor que o ROI real usa</span></div>
+      <div class="bbar" title="Quanto do orçamento das campanhas ativas já foi gasto"><i class="${c.spend > goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, goal) * 100)}%"></i></div>
+      <div class="row2"><span>Orçamento das campanhas ativas${o.is_range ? ` (${o.days} dias)` : ''} <b>${brl(goal)}</b></span><span>Usado <b>${nf(div(c.spend, goal) * 100)}%</b></span><span>${nf(c.clicks)} cliques</span></div>
+      <div class="upd">${ic('clock')}Gasto atualizado ${o.last_light ? hhmm(o.last_light.created_at) : '—'} · campanhas ${o.last_full ? hhmm(o.last_full.created_at) : '—'}</div>
     </div></div>
     <div class="kpis">
-      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('trend')}</span>ROI real</span><div class="v ${roiCls(c.roi, tg.roi_goal)}">${f2(c.roi)}</div><div class="foot">${delta(c.roi, p.roi)} meta ${nf(tg.roi_goal, 1)} · Face <span class="ghost">${f2(c.roi_face)}</span></div></div>
-      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('card')}</span>Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${nf(Math.abs(c.profit))}</div><div class="foot">já tirando imposto de ${nf(tg.tax_pct)}% e reembolsos</div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('trend')}</span>ROI real · com imposto</span><div class="v ${roiCls(c.roi, tg.roi_goal)}">${f2(c.roi)}</div><div class="foot">${delta(c.roi, p.roi)} meta ${nf(tg.roi_goal, 1)} · Face <span class="ghost">${f2(c.roi_face)}</span></div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('card')}</span>Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${nf(Math.abs(c.profit))}</div><div class="foot">já tirando imposto de ${nf(taxPct, 2)}% e reembolsos</div></div>
       <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('check')}</span>Custo por venda</span><div class="v">${c.cpa ? brl(c.cpa, 2) : '—'}</div><div class="foot">${delta(c.cpa, p.cpa, true)} ${nf(c.sales)} vendas reais${inflated > 3 ? ` · Face conta <span class="ghost">${nf(c.fb_purchases)}</span>` : ''}</div></div>
       <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('andro')}</span>Faturamento real</span><div class="v" style="font-size:22px"><small>R$</small>${nf(c.revenue)}</div><div class="foot">${delta(c.revenue, p.revenue)} detalhes no Andrômeda</div></div>
     </div>
   </div>
   ${!ME.app_connected ? `<div class="banner note">${ic('info')}<div><h2 style="font-size:16px">O app de membros ainda não está conectado</h2><p>Sem ele o Argos só mostra o lado do Face. Veja em Conexões.</p></div></div>` : ''}
+  ${bmNote()}
   <div class="grid g-2">
     ${o.is_range
       ? `<div class="card"><div class="card-h"><h3>Gasto e ROI real por dia</h3><div class="right legend"><span><i class="sw gold"></i>Gasto</span><span><i class="sw line" style="background:var(--gold)"></i>ROI real</span></div></div><div class="card-b">${daysChart(o.series, tg.roi_goal)}</div></div>`
@@ -547,21 +565,91 @@ async function viewDiag() {
   $('#dgB').onchange = e => { dg.b = e.target.value; viewDiag(); };
 }
 
+
+/* ── METAS DO MÊS ── */
+let mMonth = null;
+const monthLabel = m => { const t = new Date(m + '-15T12:00:00Z').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+const GOAL_ROWS = [
+  ['invest', 'Investimento', 'gasto no Face', v => brl(v)],
+  ['sales', 'Vendas', 'vendas reais', v => nf(v)],
+  ['revenue', 'Faturamento', 'vendas reais', v => brl(v)],
+  ['profit', 'Lucro', 'já sem imposto e reembolsos', v => brl(v)],
+  ['roi', 'ROI real', 'com imposto', v => f2(v)]
+];
+function cumChart(series, key, goalTotal, daysTotal, month) {
+  const W = 700, H = 220, p = { l: 52, r: 12, t: 14, b: 26 };
+  const cum = []; let acc = 0;
+  series.forEach(d => { acc += d[key] || 0; cum.push(acc); });
+  const max = niceMax(Math.max(goalTotal || 0, acc, 10) * 1.05);
+  const x = i => p.l + (W - p.l - p.r) * (i + 0.5) / daysTotal, y = v => H - p.b - (H - p.t - p.b) * v / max;
+  let s = GRAD + axisY(W, H, p, 0, max, 4, kfmt);
+  if (goalTotal) s += `<line x1="${x(-0.5)}" y1="${y(0)}" x2="${x(daysTotal - 0.5)}" y2="${y(goalTotal)}" stroke="${css('--good')}" stroke-dasharray="5 5"/><text x="${W - p.r}" y="${y(goalTotal) - 6}" text-anchor="end" style="fill:${css('--good')}">meta ${kfmt(goalTotal)}</text>`;
+  if (cum.length) {
+    const pts = cum.map((v, i) => [x(i), y(v)]);
+    s += `<path d="M${pts[0][0]},${y(0)} L${pts.map(q => q.join(',')).join(' L')} L${pts[pts.length - 1][0]},${y(0)}Z" fill="url(#gArea)"/><polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="${css('--gold')}" stroke-width="2.4" stroke-linejoin="round"/>`;
+    const [lx, ly] = pts[pts.length - 1];
+    s += `<circle cx="${lx}" cy="${ly}" r="9" fill="${css('--gold')}" opacity=".18"/><circle cx="${lx}" cy="${ly}" r="4.5" fill="${css('--gold')}" stroke="${css('--surface')}" stroke-width="2"/>`;
+  }
+  for (let i = 0; i < daysTotal; i += Math.ceil(daysTotal / 10)) s += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${String(i + 1).padStart(2, '0')}/${month.slice(5)}</text>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}">${s}</svg>`;
+}
+async function viewMetas() {
+  if (!mMonth) mMonth = ME.today.slice(0, 7);
+  const d = await api(`/goals?month=${mMonth}${bmQ('&')}`);
+  if (view !== 'metas') return;
+  const g = d.goal || {};
+  const cur = mMonth === ME.today.slice(0, 7);
+  sub(`${monthLabel(mMonth)}${bmSel ? ' · ' + esc(bmName()) : ''} · ${cur ? `${d.remaining_days} dias pela frente · projeção no ritmo de agora` : 'mês fechado'}`);
+  topRight(bmPicker() + `<label class="chip">${ic('calendar')}<input type="month" id="mMonth" value="${mMonth}" max="${ME.today.slice(0, 7)}" aria-label="Escolher mês"></label><button class="btn sm primary" data-act="editGoals">${ic('edit')}${d.goal ? 'Editar metas' : 'Definir metas'}</button>`);
+  const card = ([k, label, hint, fmt]) => {
+    const goal = g[k] != null ? Number(g[k]) : null, done = d.done[k] || 0;
+    const isRoi = k === 'roi';
+    const proj = isRoi ? done : d.projection[k];
+    const pctDone = goal ? (isRoi ? done / goal : done / goal) * 100 : null;
+    const okProj = goal == null ? null : proj >= goal;
+    return `<div class="card goal"><div class="eyebrow">${label}<span class="faint" style="text-transform:none;letter-spacing:0;font-weight:400">· ${hint}</span></div>
+      <div class="gv"><b class="num">${fmt(done)}</b>${goal != null ? `<span class="faint">de ${fmt(goal)}</span>` : '<span class="faint">sem meta</span>'}</div>
+      ${goal != null ? `<div class="bbar"><i class="${pctDone >= 100 ? '' : ''}" style="width:${Math.min(100, pctDone)}%"></i></div>` : ''}
+      <div class="gfoot">
+        ${isRoi ? `<span>Meta ${goal != null ? f2(goal) : '—'}</span>` : `<span>Projeção <b class="num ${okProj === null ? '' : okProj ? 'up' : 'down'}">${fmt(proj)}</b></span>`}
+        ${!isRoi && goal != null && cur ? `<span>Precisa <b class="num">${fmt(d.need[k] || 0)}</b>/dia</span>` : ''}
+        ${goal != null ? `<span class="pill p-${(isRoi ? done >= goal : okProj) ? 'good' : 'warn'}">${isRoi ? (done >= goal ? 'Na meta' : 'Abaixo') : okProj ? 'No ritmo' : 'Fora do ritmo'}</span>` : ''}
+      </div></div>`;
+  };
+  const pm = d.prev_month;
+  const chartKey = g.profit != null ? 'profit' : 'revenue';
+  $('#view').innerHTML = `
+  ${!d.goal ? `<div class="banner gold">${ic('flag')}<div><h2 style="font-size:17px">Defina as metas de ${monthLabel(mMonth).toLowerCase()}</h2><p>Investimento, vendas, faturamento, lucro e ROI. O Argos acompanha dia a dia, mostra quanto falta por dia e projeta como o mês fecha no ritmo atual. Mês passado: ${brl(pm.invest)} investidos, ${nf(pm.sales)} vendas, ${brl(pm.profit)} de lucro, ROI ${f2(pm.roi)}.</p></div><button class="btn primary" data-act="editGoals">${ic('edit')}Definir metas</button></div>` : ''}
+  ${bmNote()}
+  <div class="goals">${GOAL_ROWS.map(card).join('')}</div>
+  <div class="grid g-2">
+    <div class="card"><div class="card-h"><h3>${chartKey === 'profit' ? 'Lucro' : 'Faturamento'} acumulado no mês</h3><span class="hint">Linha tracejada = ritmo pra bater a meta</span></div>
+      <div class="card-b">${cumChart(d.series, chartKey, g[chartKey] != null ? Number(g[chartKey]) : null, d.days_total, mMonth)}</div></div>
+    <div class="card"><div class="card-h"><h3>Comparando com ${monthLabel(pm.month).toLowerCase()}</h3></div>
+      <div class="card-b tbl-wrap"><table><thead><tr><th></th><th>Este mês</th><th>Projeção</th><th>Mês passado</th></tr></thead><tbody>
+        ${[['Investimento', 'invest', v => brl(v)], ['Vendas', 'sales', v => nf(v)], ['Faturamento', 'revenue', v => brl(v)], ['Lucro', 'profit', v => brl(v)], ['Ticket', 'ticket', v => brl(v, 2)], ['Custo por venda', 'cpa', v => brl(v, 2)], ['ROI real', 'roi', v => f2(v)]].map(([l, k, f]) => `<tr><td class="txt">${l}</td><td>${f(d.done[k] || 0)}</td><td class="faint">${d.projection[k] != null ? f(d.projection[k]) : '—'}</td><td class="faint">${f(pm[k] || 0)}</td></tr>`).join('')}
+      </tbody></table>${g.notes ? `<p class="muted" style="font-size:12.5px;margin:12px 0 0">${esc(g.notes)}</p>` : ''}</div></div>
+  </div>`;
+  const mi = $('#mMonth'); if (mi) mi.onchange = e => { if (e.target.value) { mMonth = e.target.value; viewMetas(); } };
+  window.__goalsData = d;
+}
+
 /* ── CAMPANHAS ── */
 let cp = { level: 'campaign', period: 'today', active: true };
-const SIG = { scale: ['good', 'Escalar'], keep: ['gold', 'Manter'], tired: ['warn', 'Cansando'], cut: ['bad', 'Desligar?'], learning: ['info', 'Aprendendo'], off: ['face', 'Desligada'] };
+const SIG = { scale: ['good', 'Escalar'], keep: ['gold', 'Manter'], tired: ['warn', 'Cansando'], cut: ['bad', 'Desligar?'], learning: ['info', 'Aprendendo'], off: ['face', 'Desligada'], notag: ['face', 'Sem etiqueta'] };
 let campRows = [], campGuards = {};
 async function viewCamp() {
   const per = { today: [ME.today, ME.today], yesterday: [yday(), yday()], d7: [addD(ME.today, -6), ME.today] }[cp.period];
-  const d = await api(`/campaigns?level=${cp.level}&from=${per[0]}&to=${per[1]}`);
+  const d = await api(`/campaigns?level=${cp.level}&from=${per[0]}&to=${per[1]}${bmQ('&')}`);
   campRows = d.rows; campGuards = d.guards;
   sub('O que o Face diz e o que caiu de verdade, lado a lado');
-  topRight(`<div class="seg" role="group" aria-label="Período">${[['today', 'Hoje'], ['yesterday', 'Ontem'], ['d7', '7 dias']].map(([k, l]) => `<button aria-pressed="${cp.period === k}" data-act="cpPeriod" data-v="${k}">${l}</button>`).join('')}</div>`);
+  topRight(bmPicker() + `<div class="seg" role="group" aria-label="Período">${[['today', 'Hoje'], ['yesterday', 'Ontem'], ['d7', '7 dias']].map(([k, l]) => `<button aria-pressed="${cp.period === k}" data-act="cpPeriod" data-v="${k}">${l}</button>`).join('')}</div>`);
   const rows = d.rows.filter(r => !cp.active || r.status === 'ACTIVE' || r.spend > 0);
   const isC = cp.level === 'campaign';
   $('#view').innerHTML = `
+  ${bmNote()}
   <div class="banner note">${ic('info')}<div><h2 style="font-size:16px">A coluna azul é a venda que caiu de verdade</h2>
-    <p>Ela vem das vendas reais, ligadas ao anúncio pela etiqueta do link. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
+    <p>Só aparecem campanhas de contas ativas. As vendas reais por campanha vêm da etiqueta do link (UTM): campanhas antigas sem etiqueta aparecem como "Sem etiqueta" e o ROI real delas fica no total do dia. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Nível"><button aria-pressed="${isC}" data-act="cpLevel" data-v="campaign">Campanhas</button><button aria-pressed="${!isC}" data-act="cpLevel" data-v="ad">Anúncios</button></div>
     <button class="chip" data-act="cpActive">${ic(cp.active ? 'check' : 'list')}${cp.active ? 'Só ativas ou que gastaram' : 'Todas'}</button>
@@ -587,22 +675,24 @@ function editLocked() {
 let crFilter = 'all';
 const ST = { champion: ['gold', 'Campeão'], healthy: ['good', 'Saudável'], tiring: ['warn', 'Cansando'], saturated: ['bad', 'Saturado'], new: ['info', 'Novo'], off: ['face', 'Desligado'] };
 async function viewCre() {
-  const d = await api('/creatives');
-  sub('Últimos 7 dias · campeões, cansados e padrões dos últimos 30 dias');
-  topRight('');
-  const ads = d.ads.filter(a => crFilter === 'all' ? a.status === 'ACTIVE' || a.spend > 0 : crFilter === 'champ' ? a.state === 'champion' : ['tiring', 'saturated'].includes(a.state));
+  const d = await api('/creatives' + bmQ('?'));
+  sub(`Últimos 7 dias · só contas ativas · ranking ${d.rank_by === 'real' ? 'pelo ROI real (vendas com etiqueta)' : 'pelo custo por compra do Face e CTR (sem etiqueta ainda)'}`);
+  topRight(bmPicker());
+  const ads = d.ads.filter(a => crFilter === 'all' ? a.status === 'ACTIVE' || a.spend > 0 : crFilter === 'rank' ? a.rank : crFilter === 'champ' ? a.state === 'champion' : ['tiring', 'saturated'].includes(a.state));
   const grad = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `radial-gradient(120% 80% at 30% 20%, hsl(${h} 45% 58%), hsl(${(h + 40) % 360} 35% 20%))`; };
   $('#view').innerHTML = `
-  <div class="toolbar"><div class="seg" role="group" aria-label="Filtro">${[['all', 'Todos'], ['champ', 'Campeões'], ['tired', 'Cansando']].map(([k, l]) => `<button aria-pressed="${crFilter === k}" data-act="crFilter" data-v="${k}">${l}</button>`).join('')}</div>
-    <span class="muted" style="font-size:12.5px">Cansaço = frequência subindo + CTR caindo nos últimos 5 dias</span></div>
+  ${bmNote()}
+  <div class="toolbar"><div class="seg" role="group" aria-label="Filtro">${[['all', 'Todos'], ['rank', 'Ranking'], ['champ', 'Top 3'], ['tired', 'Cansando']].map(([k, l]) => `<button aria-pressed="${crFilter === k}" data-act="crFilter" data-v="${k}">${l}</button>`).join('')}</div>
+    <span class="muted" style="font-size:12.5px">Entra no ranking quem gastou ${brl(d.min_spend)}+ nos 7 dias · cansaço = frequência subindo + CTR caindo</span></div>
   ${ads.length ? `<div class="cre-grid">${ads.map(a => {
     const st = ST[a.state] || ST.healthy;
     return `<div class="card cre"><div class="thumb" style="background-image:${a.thumb_url ? `url('${esc(a.thumb_url)}')` : grad(a.name)}"><span class="tag">${ic('photo')}${a.days_on == null ? '' : a.days_on + 'd no ar'}</span>${a.rank ? `<span class="rank pill">#${a.rank}</span>` : ''}<span class="nm">${esc(a.name)}</span></div>
-      <div class="meta"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill p-${st[0]}">${st[1]}</span><span class="faint" style="font-size:11.5px">ROI real <b class="real-v num">${f2(a.roi)}</b></span></div>
-      <div class="mini-stats"><div><b>${pct(a.ctr)}</b><span>CTR</span></div><div><b class="${a.frequency >= 3 ? 'w' : ''}">${nf(a.frequency, 1)}</b><span>Freq.</span></div><div><b>${a.cpa ? brl(a.cpa, 1) : '—'}</b><span>Custo</span></div></div>
+      <div class="meta"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="pill p-${st[0]}">${st[1]}</span><span class="faint num" style="font-size:11.5px">${brl(a.spend)}</span></div>
+      <div class="mini-stats"><div><b>${pct(a.ctr)}</b><span>CTR</span></div><div><b>${a.sales ? nf(a.sales) : nf(a.fb_purchases)}</b><span>${a.sales ? 'Vendas' : 'Compras Face'}</span></div><div><b>${a.sales ? brl(a.cpa, 1) : a.cpa_face ? brl(a.cpa_face, 1) : '—'}</b><span>Custo/compra</span></div></div>
+      ${a.sales ? `<div class="faint" style="font-size:11.5px">ROI real <b class="real-v num">${f2(a.roi)}</b> · freq. ${nf(a.frequency, 1)}</div>` : `<div class="faint" style="font-size:11.5px">CPC ${brl(a.cpc, 2)} · freq. <span class="${a.frequency >= 3 ? 'w' : ''}">${nf(a.frequency, 1)}</span></div>`}
       ${spark(a.ctr_series, css(a.fatigue.score >= 55 ? '--warn' : '--good'), 120, 26)}
       <div class="fatigue"><div class="bar"><i style="left:${Math.max(2, Math.min(98, a.fatigue.score))}%"></i></div><div class="lbl"><span>novo</span><span>cansado</span></div></div>
-      <div class="faint" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.campaign_name || '')}</div></div></div>`;
+      <div class="faint" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.campaign_name || '')} · ${esc(a.bm_name || '')}</div></div></div>`;
   }).join('')}</div>` : `<div class="card"><div class="empty">${ic('image')}Nenhum criativo nesse filtro.</div></div>`}
   <div class="grid g-3">
     <div class="card"><div class="card-h"><h3>Imagens por campanha</h3><span class="hint">ROI real médio, 30 dias</span></div><div class="card-b">${barsChart(d.patterns.by_count.map(x => [x.key, x.roi, x.roi === Math.max(...d.patterns.by_count.map(y => y.roi))]), f2, { goal: ME.targets.roi_goal })}</div></div>
@@ -651,7 +741,7 @@ async function viewContas() {
     const st = a.is_reserve && a.account_status === 1 ? ['info', 'Reserva'] : ACC_ST(a.account_status);
     const dead = st[0] === 'bad';
     return `<button class="acc${dead ? ' dead' : ''}" data-act="editAcc" data-id="${esc(a.id)}"><span class="an">${esc(a.name)}</span><span class="pill p-${st[0]}">${st[1]}</span>
-      <span class="ad">${ic('card')}<span>${esc(a.card_label || a.funding_label || 'sem cartão anotado')}${a.spend_cap ? ' · limite ' + brl(a.spend_cap) : ''}${a.budget ? ' · orç. ' + brl(a.budget) + '/dia' : ''}</span></span>
+      <span class="ad">${ic('card')}<span>${esc(a.card_label || a.funding_label || 'sem cartão anotado')}${Number(a.spend_cap) > 0 ? ' · limite ' + brl(a.spend_cap) : ' · sem limite de gasto'}${a.budget ? ' · orç. ' + brl(a.budget) + '/dia' : ''}</span></span>
       ${dead ? `<span class="sh faint" style="font-size:11.5px">Caiu ${a.status_changed_at ? ago(a.status_changed_at) : ''} · ${brl(a.budget)}/dia pra redistribuir</span>` : `<span class="sh"><span class="meter"><i class="${a.share > ME.targets.max_account_share ? 'hi' : ''}" style="width:${Math.min(100, a.share * 3)}%"></i></span><span class="num faint" style="font-size:11px">${nf(a.share)}% do dia</span></span>`}</button>`;
   };
   const bmHtml = b => `<div class="bm" draggable="true" data-bm="${b.id}" title="Arraste pra outro perfil"><button class="bm-h" data-act="editBm" data-id="${b.id}">${ic('bm')}${esc(b.name)}${b.has_token ? (b.token_ok === false ? '<span class="pill p-bad" style="margin-left:auto">chave parou</span>' : '') : '<span class="pill p-face" style="margin-left:auto">sem chave</span>'}</button>${accsOf(b.id).map(accHtml).join('') || '<span class="faint" style="font-size:12px">Nenhuma conta</span>'}</div>`;
@@ -778,7 +868,7 @@ async function viewInt() {
   <div class="card"><div class="card-h"><h3>Conexões</h3></div><div style="padding-top:6px">
     <div class="int"><div class="ico-box ib-info">${ic('meta')}</div><div><div style="font-weight:600">Facebook · ${s.bms.n} BM${s.bms.n === 1 ? '' : 's'} com chave</div><div class="muted" style="font-size:12.5px">Chave de leitura por BM (usuário do sistema). Se um perfil cair, a BM continua conectada. ${s.bms.n && s.bms.ok < s.bms.n ? `<b class="down">${s.bms.n - s.bms.ok} com problema.</b>` : ''}</div></div><button class="btn sm primary" data-act="connectBm">${ic('plus')}Conectar BM</button></div>
     <div class="int"><div class="ico-box ib-gold">${ic('app')}</div><div><div style="font-weight:600">App de membros</div><div class="muted" style="font-size:12.5px">${s.app_connected ? `Lendo entradas, conversas, Pix e vendas (só leitura). ${tagPct ? `${tagPct}% das entradas dos últimos 3 dias vieram com etiqueta do Face.` : ''}` : 'Não conectado. Falta a variável APP_DATABASE_URL (veja o guia de deploy).'}</div></div><span class="pill p-${s.app_connected ? 'good' : 'bad'}">${s.app_connected ? 'Só leitura' : 'Desligado'}</span></div>
-    <div class="int"><div class="ico-box ib-good">${ic('andro')}</div><div><div style="font-weight:600">Andrômeda</div><div class="muted" style="font-size:12.5px">Recebe só o gasto total do dia, a cada ${s.collect.interval_min} min e no fechamento (00:05).</div></div><span class="pill p-${a.enabled && a.url ? 'good' : 'face'}">${a.enabled && a.url ? 'Enviando' : 'Desligado'}</span></div>
+    <div class="int"><div class="ico-box ib-good">${ic('andro')}</div><div><div style="font-weight:600">Andrômeda</div><div class="muted" style="font-size:12.5px">Recebe só o gasto total do dia (sem imposto), a cada ${s.collect.light_min || 15} min e no fechamento (00:05, conferido às 04:00).</div></div><span class="pill p-${a.enabled && a.url ? 'good' : 'face'}">${a.enabled && a.url ? 'Enviando' : 'Desligado'}</span></div>
     <div class="int"><div class="ico-box ib-info">${ic('cpu')}</div><div><div style="font-weight:600">Claude</div><div class="muted" style="font-size:12.5px">${s.last_report ? 'Última análise ' + ago(s.last_report.created_at) : 'A rotina das 07:00 ainda não publicou nenhuma análise.'}</div></div><span class="pill p-${s.last_report ? 'good' : 'face'}">${s.last_report ? 'Ligado' : 'Aguardando'}</span></div>
   </div></div>
   <div class="grid g-2e">
@@ -807,9 +897,9 @@ async function viewInt() {
         <div class="field"><label for="tgRoi">ROI que você busca</label><input id="tgRoi" type="number" step="0.05" value="${tg.roi_goal}"></div>
         <div class="field"><label for="tgBud">Meta de gasto por dia (R$)</label><input id="tgBud" type="number" step="50" value="${tg.daily_budget_goal}"></div>
         <div class="field"><label for="tgCpa">Custo por venda normal (R$)</label><input id="tgCpa" type="number" step="0.5" value="${tg.cpa_target}"></div>
-        <div class="field"><label for="tgTax">Imposto sobre o investido (%)</label><input id="tgTax" type="number" step="0.5" value="${tg.tax_pct}"></div>
+        <div class="field"><label for="tgTax">Imposto sobre o investido (%)</label><input id="tgTax" type="number" step="0.01" value="${tg.tax_pct}"></div>
         <div class="field"><label for="tgShare">Máximo do gasto numa conta só (%)</label><input id="tgShare" type="number" step="1" value="${tg.max_account_share}"></div>
-        <div class="field"><label for="tgInt">Ler o Face a cada (min)</label><input id="tgInt" type="number" step="5" min="10" value="${s.collect.interval_min}"></div>
+        <div class="field"><label for="tgInt">Atualizar o gasto a cada (min)</label><input id="tgInt" type="number" step="5" min="5" value="${s.collect.light_min || 15}"></div>
       </div>
       <div class="btns"><button class="btn sm primary" data-act="saveTargets">${ic('check')}Salvar metas</button></div></div></div>
   </div>
@@ -921,6 +1011,21 @@ const ACT = {
   async sync(el) { el.disabled = true; toast('Lendo Face e app…'); const r = await api('/sync', { body: {} }); el.disabled = false; toast(r.ok ? 'Atualizado' : (r.error || 'Terminou com avisos'), !r.ok); reload(); },
   theme(el) { const r = document.documentElement; const n = el.dataset.v || (r.dataset.theme === 'light' ? 'dark' : 'light'); r.dataset.theme = n; store.set('radar-theme', n); render(); },
   async logout() { await api('/logout', { body: {} }); showLogin(); },
+  editGoals() {
+    const d = window.__goalsData || {}; const g = d.goal || {}; const pm = d.prev_month || {};
+    const v = k => (g[k] != null ? g[k] : '');
+    sheet({ title: `Metas de ${monthLabel(mMonth).toLowerCase()}`, wide: true, ok: 'Salvar metas',
+      body: `<p>Mês passado: ${brl(pm.invest)} investidos · ${nf(pm.sales)} vendas · ${brl(pm.revenue)} faturados · ${brl(pm.profit)} de lucro · ROI ${f2(pm.roi)}. Deixe em branco o que não quiser acompanhar.</p>
+        <div class="form-row">
+          <div class="field"><label for="gI">Investimento no Face (R$)</label><input id="gI" name="invest" type="number" step="100" value="${v('invest')}"></div>
+          <div class="field"><label for="gS">Vendas</label><input id="gS" name="sales" type="number" step="10" value="${v('sales')}"></div>
+          <div class="field"><label for="gR">Faturamento (R$)</label><input id="gR" name="revenue" type="number" step="100" value="${v('revenue')}"></div>
+          <div class="field"><label for="gP">Lucro (R$)</label><input id="gP" name="profit" type="number" step="100" value="${v('profit')}"></div>
+          <div class="field"><label for="gO">ROI real (com imposto)</label><input id="gO" name="roi" type="number" step="0.05" value="${v('roi')}"></div>
+        </div>
+        <div class="field"><label for="gN">Anotação (opcional)</label><input id="gN" name="notes" value="${esc(g.notes || '')}" placeholder="Ex.: novembro com 5 mil/dia e ROI 1,8"></div>`,
+      onOk: async vals => { await api('/goals', { method: 'PUT', body: { month: mMonth, ...vals } }); toast('Metas salvas'); viewMetas(); } });
+  },
   dpOpen() { dpOpen = !dpOpen; drawDp(); },
   dpPick(el) { ov = { k: el.dataset.v, from: null, to: null }; dpOpen = false; drawDp(); viewGeral(); },
   dpApply() { let a = $('#dpFrom').value, b = $('#dpTo').value; if (!a || !b) return toast('Escolha as duas datas', true); if (a > b) [a, b] = [b, a]; ov = { k: 'custom', from: a, to: b }; dpOpen = false; drawDp(); viewGeral(); },
@@ -1027,7 +1132,7 @@ const ACT = {
   async saveHours() { const h = $('#roiHours').value.split(/[,;\s]+/).map(Number).filter(x => x >= 0 && x <= 23); await api('/settings/notify', { method: 'PATCH', body: { roi_hours: h } }); toast('Horários salvos'); viewInt(); },
   async saveTargets() {
     await api('/settings/targets', { method: 'PATCH', body: { roi_goal: +$('#tgRoi').value, daily_budget_goal: +$('#tgBud').value, cpa_target: +$('#tgCpa').value, tax_pct: +$('#tgTax').value, max_account_share: +$('#tgShare').value } });
-    await api('/settings/collect', { method: 'PATCH', body: { interval_min: Math.max(10, +$('#tgInt').value) } });
+    await api('/settings/collect', { method: 'PATCH', body: { light_min: Math.max(5, +$('#tgInt').value) } });
     ME = await api('/me'); toast('Metas salvas');
   },
   async guardTog(el) {
@@ -1044,7 +1149,7 @@ const ACT = {
   mobileMode() { store.set('radar-full', '0'); render(); },
   fullRel() { store.set('radar-full', '1'); view = 'rel'; render(); }
 };
-const RENDER = { geral: viewGeral, diag: viewDiag, camp: viewCamp, cre: viewCre, escala: viewEscala, contas: viewContas, regras: viewRegras, rel: viewRel, int: viewInt };
+const RENDER = { geral: viewGeral, metas: viewMetas, diag: viewDiag, camp: viewCamp, cre: viewCre, escala: viewEscala, contas: viewContas, regras: viewRegras, rel: viewRel, int: viewInt };
 
 document.addEventListener('click', e => {
   if (dpOpen && !e.target.closest('.dp')) { dpOpen = false; drawDp(); }
@@ -1055,6 +1160,14 @@ document.addEventListener('click', e => {
     e.preventDefault();
     Promise.resolve(ACT[a.dataset.act](a)).catch(err => { if (err.message !== 'Faça login') toast(err.message, true); });
   }
+});
+
+// filtro de BM: vale pra todas as telas
+document.addEventListener('change', e => {
+  const sel = e.target.closest && e.target.closest('[data-bmsel]');
+  if (!sel) return;
+  bmSel = sel.value; store.set('radar-bm', bmSel);
+  go(view);
 });
 
 // contingência: arrastar a BM até o perfil que administra

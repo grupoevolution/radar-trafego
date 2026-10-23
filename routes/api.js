@@ -21,6 +21,7 @@ const wrap = fn => (req, res) => fn(req, res).catch(err => {
 });
 const bad = msg => Object.assign(new Error(msg), { status: 400 });
 const dayParam = (v, def) => (T.isDay(v) ? v : def);
+const bmParam = v => (Number(v) > 0 ? Number(v) : null);
 const DEMO = () => process.env.DEMO_MODE === '1';
 
 // ── login ────────────────────────────────────────────────────────────────
@@ -73,31 +74,37 @@ router.get('/overview', wrap(async (req, res) => {
   if (!isRange) from = to = day;
   const isToday = !isRange && day === today;
   const hour = isToday ? T.parts().hour : 23;
+  const bm = bmParam(req.query.bm);
   let cur, prev, series = null, hourly = null;
   if (isRange) {
     const len = T.daysBetween(from, to) + 1;
-    series = await metrics.daySeries(from, to);
+    series = await metrics.daySeries(from, to, { bm });
     cur = await metrics.sumDays(series);
-    prev = await metrics.sumDays(await metrics.daySeries(T.addDays(from, -len), T.addDays(from, -1)));
+    prev = await metrics.sumDays(await metrics.daySeries(T.addDays(from, -len), T.addDays(from, -1), { bm }));
   } else {
-    [cur] = await metrics.daySeries(day, day);
+    [cur] = await metrics.daySeries(day, day, { bm });
     const prevDay = T.addDays(day, -1);
-    prev = isToday ? await metrics.dayUntil(prevDay, hour) : (await metrics.daySeries(prevDay, prevDay))[0];
-    hourly = await metrics.hourly(day);
+    prev = isToday ? await metrics.dayUntil(prevDay, hour, { bm }) : (await metrics.daySeries(prevDay, prevDay, { bm }))[0];
+    hourly = await metrics.hourly(day, { bm });
   }
-  const camps = (await metrics.objectRows('campaign', from, to)).filter(c => c.spend > 0).sort((a, b) => (b.revenue - b.spend) - (a.revenue - a.spend));
+  const budget_goal = await metrics.budgetRange(from, to, bm);
+  const camps = (await metrics.objectRows('campaign', from, to, { bm })).filter(c => c.spend > 0).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost));
   const { rows: alerts } = await db.query(`SELECT * FROM alerts WHERE created_at > NOW() - INTERVAL '36 hours' ORDER BY (severity='bad') DESC, created_at DESC LIMIT 6`);
   const { rows: accs } = await db.query(`
     SELECT a.id, a.name, a.account_status, a.is_reserve, b.name AS bm, COALESCE(f.spend,0)::float spend
     FROM ad_accounts a LEFT JOIN bms b ON b.id = a.bm_id
-    LEFT JOIN (SELECT object_id, SUM(spend) spend FROM fb_daily WHERE level='account' AND day BETWEEN $1 AND $2 GROUP BY object_id) f ON f.object_id = a.id`, [from, to]);
+    LEFT JOIN (SELECT object_id, SUM(spend) spend FROM fb_daily WHERE level='account' AND day BETWEEN $1 AND $2 GROUP BY object_id) f ON f.object_id = a.id
+    WHERE ($3::int IS NULL OR a.bm_id = $3::int)`, [from, to, bm]);
   const byBm = {};
   for (const a of accs) byBm[a.bm || 'Sem BM'] = (byBm[a.bm || 'Sem BM'] || 0) + a.spend;
   const { rows: and } = await db.query('SELECT * FROM andromeda_log ORDER BY sent_at DESC LIMIT 1');
   const { rows: pend } = await db.query(`SELECT COUNT(*)::int n FROM actions WHERE status='pending'`);
   const { rows: sync } = await db.query(`SELECT * FROM sync_log ORDER BY created_at DESC LIMIT 1`);
+  const { rows: lastFull } = await db.query(`SELECT created_at, ok FROM sync_log WHERE kind = 'collect' ORDER BY created_at DESC LIMIT 1`);
+  const { rows: lastLight } = await db.query(`SELECT created_at, ok FROM sync_log WHERE kind IN ('light', 'collect') ORDER BY created_at DESC LIMIT 1`);
   const s = await settings.all();
   res.json({
+    bm, budget_goal, last_full: lastFull[0] || null, last_light: lastLight[0] || null,
     day, from, to, is_range: isRange, days: T.daysBetween(from, to) + 1, is_today: isToday, hour,
     prev_label: isRange ? 'período anterior' : isToday ? `ontem até ${hour}h` : 'dia anterior',
     cur, prev, hourly, series, top: camps.slice(0, 5),
@@ -171,7 +178,7 @@ router.get('/campaigns', wrap(async (req, res) => {
   const to = dayParam(req.query.to, T.today());
   const from = dayParam(req.query.from, to);
   const level = req.query.level === 'ad' ? 'ad' : 'campaign';
-  const rows = await metrics.objectRows(level, from, to);
+  const rows = await metrics.objectRows(level, from, to, { bm: bmParam(req.query.bm) });
   const series = await metrics.objectSeries(level, rows.map(r => r.id), T.addDays(to, -6), to);
   for (const r of rows) r.series = (series[r.id] || []).map(s => Math.round(s.roi * 100) / 100);
   const s = await settings.all();
@@ -188,24 +195,92 @@ router.post('/objects/campaign/:id/budget', wrap(async (req, res) => {
   res.json(await actions.direct('campaign', req.params.id, 'budget', { value: v }));
 }));
 
+// ── BMs (pro filtro) ─────────────────────────────────────────────────────
+router.get('/bms/list', wrap(async (req, res) => {
+  const { rows } = await db.query(`
+    SELECT b.id, b.name, COUNT(a.id) FILTER (WHERE a.account_status = 1)::int active, COUNT(a.id)::int total
+    FROM bms b LEFT JOIN ad_accounts a ON a.bm_id = b.id GROUP BY b.id ORDER BY b.name`);
+  res.json(rows);
+}));
+
+// ── METAS DO MÊS ─────────────────────────────────────────────────────────
+// progresso = soma do mês até hoje; projeção = ritmo de hoje (dia corrido proporcional) até o fim do mês
+async function monthNumbers(month, bm) {
+  const first = month + '-01';
+  const last = T.addDays(T.addDays(first, 32).slice(0, 8) + '01', -1);
+  const today = T.today();
+  const to = today < last ? today : last;
+  const series = first > today ? [] : await metrics.daySeries(first, to, { bm });
+  const sum = await metrics.sumDays(series);
+  const daysTotal = T.daysBetween(first, last) + 1;
+  const now = T.parts();
+  const elapsed = first > today ? 0 : today > last ? daysTotal : T.daysBetween(first, today) + Math.max(0.15, (now.hour + now.minute / 60) / 24);
+  return { first, last, series, sum, daysTotal, elapsed };
+}
+router.get('/goals', wrap(async (req, res) => {
+  const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : T.today().slice(0, 7);
+  const bm = bmParam(req.query.bm);
+  const { rows } = await db.query('SELECT * FROM goals WHERE month = $1', [month]);
+  const g = rows[0] || null;
+  const m = await monthNumbers(month, bm);
+  const prevMonth = T.addDays(month + '-01', -1).slice(0, 7);
+  const pm = await monthNumbers(prevMonth, bm);
+  const k = m.elapsed ? m.daysTotal / m.elapsed : 0;
+  const pick = o => ({ invest: o.spend, cost: o.cost, sales: o.sales, revenue: o.revenue, profit: o.profit, roi: o.roi, ticket: o.ticket, cpa: o.cpa });
+  const done = pick(m.sum);
+  const projection = { invest: done.invest * k, cost: done.cost * k, sales: done.sales * k, revenue: done.revenue * k, profit: done.profit * k, roi: done.roi };
+  const remaining = Math.max(0, m.daysTotal - Math.floor(m.elapsed));
+  const need = g ? {
+    invest: g.invest != null ? Math.max(0, (g.invest - done.invest) / Math.max(1, remaining)) : null,
+    sales: g.sales != null ? Math.max(0, (g.sales - done.sales) / Math.max(1, remaining)) : null,
+    revenue: g.revenue != null ? Math.max(0, (g.revenue - done.revenue) / Math.max(1, remaining)) : null,
+    profit: g.profit != null ? Math.max(0, (g.profit - done.profit) / Math.max(1, remaining)) : null
+  } : null;
+  res.json({
+    month, bm, goal: g, done, projection, need, remaining_days: remaining, days_total: m.daysTotal, elapsed: m.elapsed,
+    series: m.series.map(d => ({ day: d.day, invest: d.spend, cost: d.cost, sales: d.sales, revenue: d.revenue, profit: d.profit, roi: d.roi })),
+    prev_month: { month: prevMonth, ...pick(pm.sum) }
+  });
+}));
+router.put('/goals', wrap(async (req, res) => {
+  const b = req.body || {};
+  const month = /^\d{4}-\d{2}$/.test(b.month || '') ? b.month : null;
+  if (!month) throw bad('Mês inválido');
+  const num = v => (v === '' || v === null || v === undefined || !isFinite(Number(v)) ? null : Number(v));
+  await db.query(
+    `INSERT INTO goals (month, invest, sales, revenue, profit, roi, notes, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+     ON CONFLICT (month) DO UPDATE SET invest=$2, sales=$3, revenue=$4, profit=$5, roi=$6, notes=$7, updated_at=NOW()`,
+    [month, num(b.invest), num(b.sales) == null ? null : Math.round(num(b.sales)), num(b.revenue), num(b.profit), num(b.roi), b.notes || null]);
+  res.json({ ok: true });
+}));
+
 // ── CRIATIVOS ────────────────────────────────────────────────────────────
+// ranking: com venda real (etiqueta) vale o ROI real; sem etiqueta, vale o que o Face mede:
+// custo por compra do Face e, no empate, CTR. Só entra no ranking quem gastou o mínimo.
 router.get('/creatives', wrap(async (req, res) => {
-  const to = T.today();
-  const from7 = T.addDays(to, -6), from30 = T.addDays(to, -29);
-  const ads = (await metrics.objectRows('ad', from7, to)).filter(a => a.spend > 0 || a.status === 'ACTIVE');
-  const series = await metrics.objectSeries('ad', ads.map(a => a.id), from7, to);
+  const to = dayParam(req.query.to, T.today());
+  const from7 = dayParam(req.query.from, T.addDays(to, -6)), from30 = T.addDays(to, -29);
+  const bm = bmParam(req.query.bm);
+  const ads = (await metrics.objectRows('ad', from7, to, { bm })).filter(a => a.spend > 0 || a.status === 'ACTIVE');
+  const series = await metrics.objectSeries('ad', ads.map(a => a.id), T.addDays(to, -6), to);
   const tg = await settings.get('targets');
   for (const a of ads) {
     const s = series[a.id] || [];
     a.ctr_series = s.map(x => Math.round(x.ctr * 100) / 100);
     a.fatigue = metrics.fatigue(s);
-    a.state = a.status !== 'ACTIVE' ? 'off' : a.fatigue.score >= 75 ? 'saturated' : a.fatigue.score >= 55 ? 'tiring' : (a.days_on != null && a.days_on <= 2) ? 'new' : a.roi >= tg.roi_goal ? 'champion' : 'healthy';
   }
-  ads.sort((a, b) => b.roi - a.roi);
-  let rank = 0;
-  for (const a of ads) if (a.state === 'champion' && rank < 3) a.rank = ++rank;
+  const minSpend = Math.max(15, tg.cpa_target * 2);
+  const byReal = ads.some(a => a.sales > 0);
+  const score = a => byReal ? a.roi : (a.cpa_face ? 1000 / a.cpa_face : 0) + a.ctr / 100;
+  const ranked = ads.filter(a => a.spend >= minSpend && (byReal ? a.sales > 0 : a.fb_purchases > 0 || a.ctr > 0)).sort((x, y) => score(y) - score(x));
+  ranked.forEach((a, i) => { a.rank = i + 1; });
+  for (const a of ads) {
+    a.state = a.status !== 'ACTIVE' ? 'off' : a.fatigue.score >= 75 ? 'saturated' : a.fatigue.score >= 55 ? 'tiring'
+      : a.rank && a.rank <= 3 ? 'champion' : (a.days_on != null && a.days_on <= 2) ? 'new' : 'healthy';
+  }
+  ads.sort((a, b) => (a.rank || 9999) - (b.rank || 9999) || b.spend - a.spend);
   // padrões (30 dias): nº de imagens por campanha, modelo, vida útil
-  const camps30 = await metrics.objectRows('campaign', from30, to);
+  const camps30 = await metrics.objectRows('campaign', from30, to, { bm, all: true });
   const byCount = {}, byModel = {};
   const cnt = await db.query(`SELECT campaign_id, COUNT(*)::int n FROM ads GROUP BY 1`);
   const cmap = Object.fromEntries(cnt.rows.map(r => [r.campaign_id, r.n]));
@@ -221,7 +296,7 @@ router.get('/creatives', wrap(async (req, res) => {
     bm.spend += c.spend; bm.revenue += c.revenue; bm.campaigns++;
   }
   // vida útil: dias do início até o 1º dia com cansaço ≥ 55
-  const all = await metrics.objectRows('ad', T.addDays(to, -59), to);
+  const all = await metrics.objectRows('ad', T.addDays(to, -59), to, { bm, all: true });
   const s60 = await metrics.objectSeries('ad', all.map(a => a.id), T.addDays(to, -59), to);
   const life = { '1–3': 0, '4–6': 0, '7–9': 0, '10+': 0 };
   for (const a of all) {
@@ -237,7 +312,7 @@ router.get('/creatives', wrap(async (req, res) => {
   const fmt = o => Object.entries(o).map(([k, v]) => ({ key: k, roi: metrics.div(v.revenue, v.spend), campaigns: v.campaigns, spend: v.spend }));
   const order = ['1', '2–3', '4–5', '6+'];
   res.json({
-    ads,
+    ads, rank_by: byReal ? 'real' : 'face', min_spend: minSpend, from: from7, to,
     patterns: {
       by_count: fmt(byCount).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)),
       by_model: fmt(byModel).sort((a, b) => b.roi - a.roi),
