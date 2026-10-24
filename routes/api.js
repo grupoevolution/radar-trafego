@@ -14,6 +14,7 @@ const { encrypt, safeEqual } = require('../lib/crypto');
 const { COOKIE, sign, requireAdmin, requireClaude } = require('../lib/auth');
 const reports = require('../lib/reports');
 const creatives = require('../lib/creatives');
+const r2 = v => Math.round((v || 0) * 100) / 100;
 
 const router = express.Router();
 const wrap = fn => (req, res) => fn(req, res).catch(err => {
@@ -182,10 +183,20 @@ router.get('/campaigns', wrap(async (req, res) => {
   const from = dayParam(req.query.from, to);
   const level = req.query.level === 'ad' ? 'ad' : 'campaign';
   const rows = await metrics.objectRows(level, from, to, { bm: bmParam(req.query.bm) });
-  const series = await metrics.objectSeries(level, rows.map(r => r.id), T.addDays(to, -6), to);
-  for (const r of rows) r.series = (series[r.id] || []).map(s => Math.round(s.roi * 100) / 100);
+  const from7 = T.addDays(to, -6);
+  const series = await metrics.objectSeries(level, rows.map(r => r.id), from7, to);
   const s = await settings.all();
-  res.json({ from, to, level, rows: rows.sort((a, b) => b.spend - a.spend), guards: s.guards, targets: s.targets });
+  const tax = 1 + s.targets.tax_pct / 100;
+  // 7 casinhas fixas (uma por dia); dia sem gasto = null
+  const days7 = T.range(from7, to);
+  for (const r of rows) {
+    const by = Object.fromEntries((series[r.id] || []).map(x => [x.day, x]));
+    r.days7 = days7.map(d => { const x = by[d]; return x && x.spend > 0 ? { day: d, spend: r2(x.spend), sales: x.sales, roi: r2(metrics.div(x.revenue, x.spend * tax)) } : { day: d, spend: 0, sales: 0, roi: null }; });
+  }
+  // total de vendas do app no período (pra comparar com as que vieram com etiqueta)
+  const app = await metrics.sumDays(await metrics.daySeries(from, to, { bm: bmParam(req.query.bm) }));
+  res.json({ from, to, level, rows: rows.sort((a, b) => b.spend - a.spend), guards: s.guards, targets: s.targets,
+    app_sales: app.sales, app_revenue: r2(app.revenue), tax_pct: s.targets.tax_pct });
 }));
 router.post('/objects/:level/:id/status', wrap(async (req, res) => {
   const level = ['campaign', 'ad'].includes(req.params.level) ? req.params.level : 'campaign';
@@ -328,7 +339,7 @@ router.get('/creatives', wrap(async (req, res) => {
 // cada item = uma imagem (mesmo hash), somando todos os anúncios/campanhas/contas onde ela roda
 router.get('/creatives/images', wrap(async (req, res) => {
   const to = dayParam(req.query.to, T.today());
-  const days = Math.min(60, Math.max(3, Number(req.query.days) || 14));
+  const days = Math.min(60, Math.max(1, Number(req.query.days) || 14));
   res.json(await creatives.byImage(T.addDays(to, -(days - 1)), to, bmParam(req.query.bm)));
 }));
 

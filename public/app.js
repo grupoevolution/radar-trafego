@@ -54,7 +54,9 @@ const GRAD = '<defs><linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop 
 const ic = n => `<svg class="i" viewBox="0 0 24 24">${I[n] || ''}</svg>`;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf = (v, d = 0) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
-const brl = (v, d = 0) => ((Number(v) || 0) < 0 ? '−' : '') + 'R$ ' + nf(Math.abs(Number(v) || 0), d);
+const brl = (v, d = 2) => ((Number(v) || 0) < 0 ? '−' : '') + 'R$ ' + nf(Math.abs(Number(v) || 0), d);
+// valor grande com os centavos menores: R$ 1.318,64
+const money = v => { const t = nf(Math.abs(Number(v) || 0), 2); const i = t.lastIndexOf(','); return t.slice(0, i) + `<span class="cents">${t.slice(i)}</span>`; };
 const pct = (v, d = 1) => nf(v, d) + '%';
 const f2 = v => nf(v, 2);
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -446,19 +448,23 @@ async function viewGeral() {
     ['Pagaram o Pix', 'venda real', c.sales, c.pay_rate, p.pay_rate]
   ];
   const mx = Math.log10(Math.max(10, c.impressions || 10));
-  const funnel = `<div class="fr head"><span>Etapa</span><span>Pessoas</span><span style="text-align:right">Passaram</span><span style="text-align:right">${o.is_range ? 'Período anterior' : o.is_today ? 'Ontem, mesmo horário' : 'Dia anterior'}</span></div>` +
+  const funnel = `<div class="fr head"><span>Etapa</span><span>Pessoas</span><span style="text-align:right">Passaram</span><span style="text-align:right">Do total</span><span style="text-align:right">${o.is_range ? 'Período anterior' : o.is_today ? 'Ontem, mesmo horário' : 'Dia anterior'}</span></div>` +
     funnelRows.map((r, i) => {
       const alert = i > 0 && r[4] && r[3] < r[4] * 0.85;
-      return `<div class="fr${alert ? ' alert' : ''}"><div class="lb">${r[0]}<small>${r[1]}</small></div><div class="bw"><i style="width:${Math.max(3, Math.log10(Math.max(1, r[2])) / mx * 100)}%"></i><b>${nf(r[2])}</b></div><div class="pc">${i ? pct(r[3], 1) : '—'}<small>${i ? 'da etapa anterior' : ''}</small></div><div class="yd">${i && r[4] != null ? pct(r[4], 1) : nf(p.impressions)}</div></div>`;
+      return `<div class="fr${alert ? ' alert' : ''}"><div class="lb">${r[0]}<small>${r[1]}</small></div><div class="bw"><i style="width:${Math.max(3, Math.log10(Math.max(1, r[2])) / mx * 100)}%"></i><b>${nf(r[2])}</b></div><div class="pc">${i ? pct(r[3], 1) : '—'}<small>${i ? 'da etapa anterior' : ''}</small></div><div class="pc tot">${i > 2 && c.visitors ? pct(div(r[2], c.visitors) * 100, r[2] / c.visitors < 0.1 ? 2 : 1) : '—'}<small>${i > 2 ? 'de quem entrou' : ''}</small></div><div class="yd">${i && r[4] != null ? pct(r[4], 1) : nf(p.impressions)}</div></div>`;
     }).join('');
+  // teto: o máximo que cada venda pode custar no Face pro ROI real (com imposto) bater a meta
+  const cpaCap = c.ticket ? c.ticket / (tg.roi_goal * (1 + taxPct / 100)) : 0;
   const sev = (cur, prev, inv) => { if (!prev) return ''; const d = (cur - prev) / prev * (inv ? -1 : 1); return d < -0.15 ? 'bad' : d < -0.05 ? 'warn' : ''; };
   const chain = [
     ['CPM · custo pra aparecer', brl(c.cpm, 2), brl(p.cpm, 2), delta(c.cpm, p.cpm, true), sev(c.cpm, p.cpm, true)],
     ['CTR · quem clicou', pct(c.ctr), pct(p.ctr), delta(c.ctr, p.ctr), sev(c.ctr, p.ctr)],
     ['Chegou no app', pct(c.arrival, 0), pct(p.arrival, 0), delta(c.arrival, p.arrival), sev(c.arrival, p.arrival)],
     ['Comprou no app', pct(c.conv, 2), pct(p.conv, 2), delta(c.conv, p.conv), sev(c.conv, p.conv)],
-    ['Ticket médio', brl(c.ticket, 2), brl(p.ticket, 2), delta(c.ticket, p.ticket), sev(c.ticket, p.ticket)]
-  ].map(l => `<div class="link ${l[4]}"><span class="lbl">${l[0]}</span><span class="val">${l[1]}</span><span class="was">antes ${l[2]} ${l[3]}</span></div>`).join('');
+    ['Ticket médio', brl(c.ticket, 2), brl(p.ticket, 2), delta(c.ticket, p.ticket), sev(c.ticket, p.ticket)],
+    ['Custo por compra', c.sales ? brl(c.cpa, 2) : '—', p.sales ? brl(p.cpa, 2) : '—', p.sales && c.sales ? delta(c.cpa, p.cpa, true) : '', cpaCap && c.sales && c.cpa > cpaCap ? 'bad' : ''],
+  ].map(l => `<div class="link ${l[4]}"><span class="lbl">${l[0]}</span><span class="val">${l[1]}</span><span class="was">antes ${l[2]} ${l[3]}</span></div>`).join('')
+  + (cpaCap ? `<div class="link cap ${c.sales && c.cpa > cpaCap ? 'bad' : 'ok'}"><span class="lbl">Teto do custo por compra</span><span class="val">${brl(cpaCap, 2)}</span><span class="was">ticket ${brl(c.ticket, 2)} ÷ ROI ${nf(tg.roi_goal, 1)} (com imposto) · ${c.sales ? (c.cpa > cpaCap ? `<b class="down">${brl(c.cpa - cpaCap, 2)} acima</b>` : `<b class="up">${brl(cpaCap - c.cpa, 2)} de folga</b>`) : 'sem vendas ainda'}</span></div>` : '');
   const shades = [1, .82, .66, .52, .4, .3, .22, .16];
   const tot = o.accounts.by_bm.reduce((s, x) => s + x.spend, 0);
   const share = o.accounts.by_bm.map((x, i) => ({ ...x, pct: div(x.spend, tot) * 100, sh: shades[Math.min(i, shades.length - 1)] }));
@@ -466,7 +472,7 @@ async function viewGeral() {
   <div class="grid g-hero">
     <div class="hero-wrap"><div class="spend">
       <span class="eyebrow">Gasto · ${lbl.toLowerCase()}${bmSel ? ' · ' + esc(bmName()) : ''}</span>
-      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span class="big grad-t num">R$ ${nf(c.spend)}</span>${dNeutral(c.spend, p.spend)}<span class="faint" style="font-size:12px">vs ${o.prev_label}</span></div>
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span class="big grad-t num">R$ ${money(c.spend)}</span>${dNeutral(c.spend, p.spend)}<span class="faint" style="font-size:12px">vs ${o.prev_label}</span></div>
       <div class="tax-line"><span>Com imposto (${nf(taxPct, 2)}%)</span><b class="num">${brl(c.cost, 2)}</b><span class="faint">é esse valor que o ROI real usa</span></div>
       <div class="bbar" title="Quanto do orçamento das campanhas ativas já foi gasto"><i class="${c.spend > goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, goal) * 100)}%"></i></div>
       <div class="row2"><span>Orçamento das campanhas ativas${o.is_range ? ` (${o.days} dias)` : ''} <b>${brl(goal)}</b></span><span>Usado <b>${nf(div(c.spend, goal) * 100)}%</b></span><span>${nf(c.clicks)} cliques</span></div>
@@ -474,9 +480,9 @@ async function viewGeral() {
     </div></div>
     <div class="kpis">
       <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('trend')}</span>ROI real · com imposto</span><div class="v ${roiCls(c.roi, tg.roi_goal)}">${f2(c.roi)}</div><div class="foot">${delta(c.roi, p.roi)} meta ${nf(tg.roi_goal, 1)} · Face <span class="ghost">${f2(c.roi_face)}</span></div></div>
-      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('card')}</span>Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${nf(Math.abs(c.profit))}</div><div class="foot">já tirando imposto de ${nf(taxPct, 2)}% e reembolsos</div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('card')}</span>Lucro no bolso</span><div class="v ${c.profit < 0 ? 'down' : ''}"><small>R$</small>${c.profit < 0 ? '−' : ''}${money(c.profit)}</div><div class="foot">já tirando imposto de ${nf(taxPct, 2)}% e reembolsos</div></div>
       <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('check')}</span>Custo por venda</span><div class="v">${c.cpa ? brl(c.cpa, 2) : '—'}</div><div class="foot">${delta(c.cpa, p.cpa, true)} ${nf(c.sales)} vendas reais${inflated > 3 ? ` · Face conta <span class="ghost">${nf(c.fb_purchases)}</span>` : ''}</div></div>
-      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('andro')}</span>Faturamento real</span><div class="v" style="font-size:22px"><small>R$</small>${nf(c.revenue)}</div><div class="foot">${delta(c.revenue, p.revenue)} detalhes no Andrômeda</div></div>
+      <div class="card kpi"><span class="eyebrow"><span class="ki">${ic('andro')}</span>Faturamento real</span><div class="v" style="font-size:22px"><small>R$</small>${money(c.revenue)}</div><div class="foot">${delta(c.revenue, p.revenue)} detalhes no Andrômeda</div></div>
     </div>
   </div>
   ${!ME.app_connected ? `<div class="banner note">${ic('info')}<div><h2 style="font-size:16px">O app de membros ainda não está conectado</h2><p>Sem ele o Argos só mostra o lado do Face. Veja em Conexões.</p></div></div>` : ''}
@@ -679,9 +685,35 @@ async function viewCamp() {
       ${isC ? `<td>${c.budget ? `<button class="budget" data-act="bud" data-i="${i}">${brl(c.budget)} ${ic('edit')}</button>` : '<span class="faint">—</span>'}</td>` : ''}
       <td>${brl(c.spend, 2)}</td><td>${c.impressions ? brl(c.cpm, 2) : '—'}</td><td>${c.impressions ? pct(c.ctr) : '—'}</td><td class="${c.frequency >= 3 ? 'w' : ''}">${c.frequency ? nf(c.frequency, 1) : '—'}</td>
       <td class="face-v">${nf(c.fb_purchases)}</td><td class="real-v">${nf(c.sales)}</td><td>${c.cpa ? brl(c.cpa, 2) : '—'}</td><td class="real-v">${c.spend ? f2(c.roi) : '—'}</td>
-      <td style="width:110px">${spark(c.series, css(c.roi >= ME.targets.roi_goal ? '--good' : c.roi >= 1.1 ? '--gold' : '--bad'), 100, 26)}</td>
+      <td style="width:128px">${days7Chart(c.days7)}</td>
       <td><span class="pill p-${SIG[c.signal][0]}">${SIG[c.signal][1]}</span></td></tr>`).join('')}
-  </tbody></table>` : `<div class="empty">${ic('list')}Nenhuma ${isC ? 'campanha' : 'anúncio'} nesse período.</div>`}</div></div>`;
+  </tbody>${campTotals(rows, d, isC)}</table>` : `<div class="empty">${ic('list')}Nenhuma ${isC ? 'campanha' : 'anúncio'} nesse período.</div>`}</div></div>
+  ${rows.length && d.app_sales ? `<p class="faint" style="font-size:12px;margin:0">Vendas reais com etiqueta nessas ${isC ? 'campanhas' : 'anúncios'}: <b>${nf(rows.reduce((a, c) => a + c.sales, 0))}</b> de <b>${nf(d.app_sales)}</b> vendas do app no período. A diferença são vendas sem etiqueta (campanhas antigas sem UTM, quem voltou depois por outro caminho, link compartilhado) — elas entram no total do dia, mas não dá pra saber de qual campanha vieram.</p>` : ''}`;
+}
+// linha de totais: soma do que soma (gasto, vendas) e média ponderada do resto (CPM, CTR, freq., ROI)
+function campTotals(rows, d, isC) {
+  const S = k => rows.reduce((a, c) => a + (Number(c[k]) || 0), 0);
+  const sp = S('spend'), im = S('impressions'), cl = S('clicks'), sa = S('sales'), rv = S('revenue');
+  const fq = im ? rows.reduce((a, c) => a + (c.frequency || 0) * (c.impressions || 0), 0) / im : 0;
+  const roi = div(rv, sp * (1 + (d.tax_pct ?? 12.15) / 100));
+  return `<tfoot><tr class="tot"><td class="txt"><b>Total</b><small class="faint" style="display:block">${rows.length} ${isC ? 'campanhas' : 'anúncios'}</small></td><td></td><td></td>${isC ? `<td title="Só das ligadas">${brl(rows.filter(c => c.status === 'ACTIVE').reduce((a, c) => a + (Number(c.budget) || 0), 0))}</td>` : ''}
+    <td><b>${brl(sp)}</b></td><td>${im ? brl(sp / im * 1000) : '—'}</td><td>${im ? pct(cl / im * 100) : '—'}</td><td>${fq ? nf(fq, 1) : '—'}</td>
+    <td class="face-v"><b>${nf(S('fb_purchases'))}</b></td><td class="real-v"><b>${nf(sa)}</b></td><td>${sa ? brl(sp / sa) : '—'}</td><td class="real-v"><b>${sp ? f2(roi) : '—'}</b></td><td></td><td></td></tr></tfoot>`;
+}
+// 7 casinhas (uma por dia): linha do ROI real com bolinha por dia; tracejado = meta
+function days7Chart(days) {
+  if (!days || !days.length) return '';
+  const W = 120, H = 30, n = days.length, goal = ME.targets.roi_goal;
+  const x = i => 5 + (W - 10) * i / (n - 1);
+  const mx = Math.max(goal * 1.6, 2.4, ...days.map(d => d.roi || 0));
+  const y = v => H - 4 - (H - 8) * Math.min(v, mx) / mx;
+  const pts = days.map((d, i) => d.roi == null ? null : [x(i), y(d.roi), d]).filter(Boolean);
+  const col = r => r >= goal ? 'var(--good)' : r >= 1.3 ? 'var(--warn)' : 'var(--bad)';
+  let s = `<line x1="2" x2="${W - 2}" y1="${y(goal)}" y2="${y(goal)}" stroke="var(--good)" stroke-dasharray="3 3" opacity=".45"/>`;
+  s += days.map((d, i) => `<line x1="${x(i)}" x2="${x(i)}" y1="${H - 2}" y2="${H}" stroke="var(--line-2)"/>`).join('');
+  if (pts.length > 1) s += `<polyline points="${pts.map(p => p[0] + ',' + p[1]).join(' ')}" fill="none" stroke="var(--gold-2)" stroke-width="1.6" stroke-linejoin="round" opacity=".85"/>`;
+  s += pts.map(([px, py, d]) => `<circle cx="${px}" cy="${py}" r="2.6" fill="${col(d.roi)}"><title>${shortDay(d.day)} · ROI ${f2(d.roi)} · ${nf(d.sales)} vendas · ${brl(d.spend)}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="ROI real dos últimos 7 dias">${s}</svg>`;
 }
 const addD = (day, n) => { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 function editLocked() {
@@ -689,6 +721,7 @@ function editLocked() {
 }
 
 /* ── CRIATIVOS ── */
+const CR_PER = [['today', 'Hoje'], ['yesterday', 'Ontem'], ['7', '7 dias'], ['14', '14 dias'], ['30', '30 dias']];
 let crFilter = 'all', crSort = 'sales', crDays = 14, crOpen = null, crData = null;
 const ST = { good: ['good', 'Vendendo'], falling: ['warn', 'Caindo'], stopped: ['bad', 'Parou de vender'], new: ['info', 'Novo'], off: ['face', 'Desligada'] };
 const roiCol = (r, g) => r == null ? '' : r >= g ? 'var(--good)' : r >= 1.3 ? 'var(--warn)' : 'var(--bad)';
@@ -711,7 +744,7 @@ function creChart(series, goal, W = 300, H = 84) {
   return `<svg class="cre-ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Vendas${hasRoi ? ' e ROI' : ''} por dia">${s}</svg>`;
 }
 async function viewCre() {
-  const [d, pt] = await Promise.all([api(`/creatives/images?days=${crDays}` + bmQ('&')), api('/creatives' + bmQ('?')).catch(() => null)]);
+  const [d, pt] = await Promise.all([api(`/creatives/images?days=${crDays === 'today' || crDays === 'yesterday' ? 1 : crDays}${crDays === 'yesterday' ? '&to=' + yday() : ''}` + bmQ('&')), api('/creatives' + bmQ('?')).catch(() => null)]);
   crData = d;
   const real = d.by === 'real', goal = d.roi_goal || ME.targets.roi_goal;
   sub(`Cada cartão é uma imagem, somando todas as campanhas e contas onde ela roda · ${real ? 'vendas reais (etiqueta)' : 'compras que o Face conta (sem etiqueta ainda)'}`);
@@ -725,13 +758,13 @@ async function viewCre() {
   $('#view').innerHTML = `
   ${bmNote()}
   <div class="toolbar">
-    <div class="seg" role="group" aria-label="Período">${[7, 14, 30].map(n => `<button aria-pressed="${crDays === n}" data-act="crDays" data-v="${n}">${n} dias</button>`).join('')}</div>
+    <div class="seg" role="group" aria-label="Período">${CR_PER.map(([k, l]) => `<button aria-pressed="${String(crDays) === k}" data-act="crDays" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="seg" role="group" aria-label="Ordenar">${[['sales', 'Mais vendas'], ['roi', 'Maior ROI'], ['spend', 'Mais gasto']].map(([k, l]) => `<button aria-pressed="${crSort === k}" data-act="crSort" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="seg" role="group" aria-label="Situação">${[['all', 'Todas'], ['good', 'Vendendo'], ['falling', 'Caindo'], ['stopped', 'Parou'], ['new', 'Novas'], ['off', 'Desligadas']].map(([k, l]) => `<button aria-pressed="${crFilter === k}" data-act="crFilter" data-v="${k}">${l}</button>`).join('')}</div>
   </div>
   <div class="grid g-4">
     <div class="card kpi"><span class="eyebrow">Imagens no ar</span><b class="v num">${nf(all.filter(x => x.active).length)}</b></div>
-    <div class="card kpi"><span class="eyebrow">${real ? 'Vendas' : 'Compras Face'} · ${d.days} dias</span><b class="v num">${nf(tot)}</b></div>
+    <div class="card kpi"><span class="eyebrow">${real ? 'Vendas' : 'Compras Face'} · ${(CR_PER.find(p => p[0] === String(crDays)) || [0, d.days + ' dias'])[1].toLowerCase()}</span><b class="v num">${nf(tot)}</b></div>
     <div class="card kpi"><span class="eyebrow">ROI real</span><b class="v num" style="color:${roiCol(real ? div(rv, sp * (1 + (ME.targets.tax_pct ?? 12.15) / 100)) : null, goal)}">${real ? f2(div(rv, sp * (1 + (ME.targets.tax_pct ?? 12.15) / 100))) : '—'}</b></div>
     <div class="card kpi"><span class="eyebrow">Pararam de vender</span><b class="v num" style="color:var(--bad)">${nf(all.filter(x => x.state === 'stopped').length)}</b></div>
   </div>
@@ -1046,13 +1079,18 @@ async function mob(t) {
   try {
     if (t === 'hoje') {
       const o = await api('/overview');
-      const c = o.cur, p = o.prev, C = 2 * Math.PI * 50, fill = Math.min(1, div(c.roi, o.targets.roi_goal * 1.25));
+      const c = o.cur, p = o.prev, bud = o.budget_goal || o.targets.daily_budget_goal, C = 2 * Math.PI * 50, fill = Math.min(1, div(c.roi, o.targets.roi_goal * 1.25));
       const subscribed = 'Notification' in window && Notification.permission === 'granted';
       B.innerHTML = `${ME.demo ? '<span class="demo" style="justify-self:start">Dados de demonstração</span>' : ''}
         ${!subscribed ? `<button class="btn primary block" data-act="enablePush">${ic('bell')}Ativar notificações</button>` : ''}
-        <div class="hero-wrap"><div class="spend" style="padding:18px 20px;gap:10px"><span class="eyebrow">Gasto hoje · até ${o.hour}h</span><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="big grad-t num" style="font-size:40px">R$ ${nf(c.spend)}</span>${dNeutral(c.spend, p.spend)}</div><div class="bbar"><i class="${c.spend > o.targets.daily_budget_goal ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, o.targets.daily_budget_goal) * 100)}%"></i></div><div class="row2"><span>Meta do dia <b>${brl(o.targets.daily_budget_goal)}</b></span><span>${nf(c.clicks)} cliques</span></div></div></div>
-        <div class="card ring-card"><div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="10"/><circle cx="60" cy="60" r="50" fill="none" stroke="${c.roi >= o.targets.roi_goal ? 'var(--good)' : c.roi >= 1.1 ? 'var(--gold)' : 'var(--bad)'}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C * fill} ${C}"/></svg><div class="c"><b class="grad-t">${f2(c.roi)}</b><span>ROI real</span></div></div>
-          <div class="kv"><div><span class="muted">Gasto</span><b>${brl(c.spend)}</b></div><div><span class="muted">Faturamento</span><b>${brl(c.revenue)}</b></div><div><span class="muted">Lucro no bolso</span><b class="${c.profit < 0 ? 'down' : 'up'}">${brl(c.profit)}</b></div><div><span class="muted">Face diz</span><span class="ghost">ROI ${f2(c.roi_face)}</span></div></div></div>
+        <div class="hero-wrap"><div class="spend" style="padding:18px 20px;gap:10px"><span class="eyebrow">Gasto hoje · até ${o.hour}h</span><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="big grad-t num" style="font-size:40px">R$ ${money(c.spend)}</span>${dNeutral(c.spend, p.spend)}</div><div class="bbar"><i class="${c.spend > bud ? 'hi' : ''}" style="width:${Math.min(100, div(c.spend, bud) * 100)}%"></i></div><div class="row2"><span>Orçamento das ativas <b>${brl(bud)}</b></span><span>Usado <b>${nf(div(c.spend, bud) * 100)}%</b></span></div><div class="row2"><span>Com imposto <b>${brl(c.cost)}</b></span><span>${nf(c.clicks)} cliques</span></div></div></div>
+        <div class="card roi-card"><div class="rc-l"><span class="eyebrow">Resultado de hoje</span>
+          <div class="rc-row"><span>Faturamento</span><b>${brl(c.revenue)}</b></div>
+          <div class="rc-row"><span>Lucro no bolso</span><b class="${c.profit < 0 ? 'down' : 'up'}">${brl(c.profit)}</b></div>
+          <div class="rc-row"><span>Vendas reais</span><b>${nf(c.sales)} <span class="ghost" style="font-size:11px">Face ${nf(c.fb_purchases)}</span></b></div>
+          <div class="rc-row"><span>Custo por venda</span><b>${c.sales ? brl(c.cpa) : '—'}</b></div></div>
+        <div class="rc-r"><div class="ring sm"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="11"/><circle cx="60" cy="60" r="50" fill="none" stroke="${c.roi >= o.targets.roi_goal ? 'var(--good)' : c.roi >= 1.1 ? 'var(--gold)' : 'var(--bad)'}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C * fill} ${C}"/></svg><div class="c"><b class="grad-t">${f2(c.roi)}</b><span>ROI real</span></div></div>
+          <span class="rc-goal">meta ${nf(o.targets.roi_goal, 1)} · Face <s>${f2(c.roi_face)}</s></span></div></div>
         <div class="card card-b" style="display:grid;gap:9px"><div class="eyebrow">Funil de hoje · até ${o.hour}h</div>
           ${[['Cliques no Face', c.clicks, null], ['Entraram no app', c.visitors, c.arrival], ['Conversaram', c.chatted, c.chat_rate], ['Clicaram em comprar', c.checkout, c.checkout_rate], ['Geraram Pix', c.pix, c.pix_rate], ['Pagaram', c.sales, c.pay_rate]].map(r => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${r[0]}</span><span class="num"><b>${nf(r[1])}</b> <span class="faint" style="font-size:11.5px;display:inline-block;width:44px;text-align:right">${r[2] == null ? '' : pct(r[2], 0)}</span></span></div>`).join('')}
           <div style="font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line-2);padding-top:8px">Conversão de quem entrou: <b class="num" style="color:var(--gold)">${pct(c.conv, 2)}</b></div></div>
@@ -1132,7 +1170,7 @@ const ACT = {
   abToggle() { abOpen = !abOpen; drawAlertBar(); },
   abOk() { store.set('argos-alert-seen', Math.max(...AB.map(a => a.id))); abOpen = false; drawAlertBar(); },
   crSort(el) { crSort = el.dataset.v; viewCre(); },
-  crDays(el) { crDays = Number(el.dataset.v); viewCre(); },
+  crDays(el) { crDays = isNaN(+el.dataset.v) ? el.dataset.v : +el.dataset.v; viewCre(); },
   crOpen(el) { crOpen = el.dataset.v && el.dataset.v !== crOpen ? el.dataset.v : null; viewCre().then(() => { if (crOpen) { const d = $('.cre-dt'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }); },
   tog(el) {
     const c = campRows[+el.dataset.i];

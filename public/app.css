@@ -207,7 +207,7 @@ button.chip:hover{border-color:var(--gold)}
 
 /* funil */
 .fun{display:grid}
-.fr{display:grid;grid-template-columns:170px minmax(0,1fr) 150px 110px;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.fr{display:grid;grid-template-columns:170px minmax(0,1fr) 120px 110px 110px;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
 .fr:first-child{border-top:0}
 .fr.head{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;padding-top:0}
 .fr .lb{font-size:13px;font-weight:500}
@@ -226,7 +226,7 @@ button.chip:hover{border-color:var(--gold)}
 .fun-sum span{font-size:12px;color:var(--muted)}
 
 /* corrente */
-.chain{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.chain{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .link{padding:14px 14px 12px;border-right:1px solid var(--line);position:relative;display:grid;gap:4px;min-width:0}
 .link:last-child{border-right:0}
 .link .lbl{font-size:11.5px;color:var(--muted)}
@@ -441,7 +441,7 @@ tr.hl td{background:var(--bad-soft)}
   .wrap{padding:16px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
   .g-2e{grid-template-columns:minmax(0,1fr)}
   .dc{grid-template-columns:96px minmax(0,1fr) 118px;gap:10px} .dc .r{font-size:11.5px}
-  .fr{grid-template-columns:110px minmax(0,1fr) 92px}.fr .yd{display:none}
+  .fr{grid-template-columns:110px minmax(0,1fr) 84px 84px}.fr .yd{display:none}
   .dp-menu{right:auto;left:0;width:min(300px,calc(100vw - 32px))}
 }
 @media (max-width:520px){
@@ -526,3 +526,27 @@ body{padding-top:var(--abh,0px)}
 .top{top:calc(env(safe-area-inset-top,0px) + var(--abh,0px))}
 .mob{padding-top:max(env(safe-area-inset-top,0px) - var(--abh,0px),0px)}
 .mob-seg{justify-self:start}
+.cents{font-size:.6em;opacity:.75;letter-spacing:0}
+tfoot tr.tot td{border-top:1px solid var(--line-2);background:var(--surface-2);font-family:var(--f-mono)}tfoot tr.tot td.txt{font-family:var(--f-body)}
+
+.link.cap{grid-column:1/-1;border-right:0;border-top:1px solid var(--line);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:11px 14px}
+.link.cap .val{font-size:15px}
+.link.cap.ok{background:linear-gradient(100deg,var(--good-soft),transparent 55%)}
+.link.cap.bad{background:linear-gradient(100deg,var(--bad-soft),transparent 55%)}
+.link.cap.bad::after{display:none}
+.fr .pc.tot{color:var(--gold-2)}
+
+/* celular: bloco do ROI (dados à esquerda, anel à direita) */
+.roi-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px 16px 16px 18px;position:relative;overflow:hidden;
+  background:radial-gradient(120% 140% at 100% 0%,color-mix(in srgb,var(--gold) 16%,transparent),transparent 55%),var(--card);border-color:var(--line-2)}
+.rc-l{display:grid;gap:8px;min-width:0}
+.rc-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;color:var(--muted)}
+.rc-row b{font-family:var(--f-mono);font-weight:600;color:var(--fg);white-space:nowrap}
+.rc-row b.up{color:var(--good)} .rc-row b.down{color:var(--bad)}
+.rc-r{display:grid;justify-items:center;gap:6px}
+.ring.sm{width:96px;height:96px}
+.ring.sm svg{width:96px;height:96px}
+.ring.sm .c b{font-size:24px}
+.ring.sm .c span{font-size:9px}
+.rc-goal{font-size:10.5px;color:var(--faint);font-family:var(--f-mono);white-space:nowrap}
+.rc-goal s{opacity:.7}
