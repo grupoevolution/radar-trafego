@@ -346,8 +346,14 @@ router.get('/creatives/images', wrap(async (req, res) => {
 // avisos graves das últimas 24h (barra fixa no topo do app)
 router.get('/alerts/active', wrap(async (req, res) => {
   const { rows } = await db.query(`SELECT id, kind, title, detail, created_at FROM alerts
-    WHERE kind IN ('account_down','ad_rejected','token') AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 20`);
+    WHERE kind IN ('account_down','ad_rejected','token') AND dismissed_at IS NULL AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 20`);
   res.json(rows);
+}));
+// "Ciente": some da barra em todos os aparelhos
+router.post('/alerts/dismiss', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger);
+  if (ids.length) await db.query('UPDATE alerts SET dismissed_at = NOW() WHERE id = ANY($1) AND dismissed_at IS NULL', [ids]);
+  res.json({ ok: true, dismissed: ids.length });
 }));
 
 // ── ESCALA ───────────────────────────────────────────────────────────────

@@ -1168,7 +1168,7 @@ const ACT = {
   cpActive() { cp.active = !cp.active; viewCamp(); },
   crFilter(el) { crFilter = el.dataset.v; viewCre(); },
   abToggle() { abOpen = !abOpen; drawAlertBar(); },
-  abOk() { store.set('argos-alert-seen', Math.max(...AB.map(a => a.id))); abOpen = false; drawAlertBar(); },
+  async abOk() { const ids = AB.map(a => a.id); store.set('argos-alert-seen', Math.max(...ids)); AB = []; abOpen = false; drawAlertBar(); await api('/alerts/dismiss', { body: { ids } }); },
   crSort(el) { crSort = el.dataset.v; viewCre(); },
   crDays(el) { crDays = isNaN(+el.dataset.v) ? el.dataset.v : +el.dataset.v; viewCre(); },
   crOpen(el) { crOpen = el.dataset.v && el.dataset.v !== crOpen ? el.dataset.v : null; viewCre().then(() => { if (crOpen) { const d = $('.cre-dt'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }); },
