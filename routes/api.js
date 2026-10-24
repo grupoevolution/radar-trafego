@@ -13,6 +13,7 @@ const appdb = require('../appdb');
 const { encrypt, safeEqual } = require('../lib/crypto');
 const { COOKIE, sign, requireAdmin, requireClaude } = require('../lib/auth');
 const reports = require('../lib/reports');
+const creatives = require('../lib/creatives');
 
 const router = express.Router();
 const wrap = fn => (req, res) => fn(req, res).catch(err => {
@@ -43,7 +44,9 @@ router.post('/logout', (req, res) => { res.clearCookie(COOKIE); res.json({ ok: t
 
 // relatório do Claude entra com a chave dele (antes do requireAdmin geral)
 router.get('/claude/snapshot', requireClaude, wrap(async (req, res) => {
-  res.json(await reports.snapshot(dayParam(req.query.day, T.yesterday())));
+  const day = dayParam(req.query.day, T.yesterday());
+  const period = req.query.period;
+  res.json(period === 'week' || period === 'month' ? await reports.snapshotPeriod(period, day) : await reports.snapshot(day));
 }));
 router.post('/reports', requireClaude, wrap(async (req, res) => {
   res.json(await reports.create(req.body));
@@ -322,62 +325,11 @@ router.get('/creatives', wrap(async (req, res) => {
 }));
 
 // ── CRIATIVOS POR IMAGEM ─────────────────────────────────────────────────
-const r2 = v => Math.round((v || 0) * 100) / 100;
 // cada item = uma imagem (mesmo hash), somando todos os anúncios/campanhas/contas onde ela roda
 router.get('/creatives/images', wrap(async (req, res) => {
   const to = dayParam(req.query.to, T.today());
   const days = Math.min(60, Math.max(3, Number(req.query.days) || 14));
-  const from = T.addDays(to, -(days - 1));
-  const bm = bmParam(req.query.bm);
-  const ads = (await metrics.objectRows('ad', from, to, { bm })).filter(a => a.spend > 0 || a.status === 'ACTIVE');
-  const series = await metrics.objectSeries('ad', ads.map(a => a.id), from, to);
-  const tg = await settings.get('targets');
-  const tax = tg.tax_pct / 100;
-  const byReal = ads.some(a => a.sales > 0);
-  const dayList = []; for (let d = from; d <= to; d = T.addDays(d, 1)) dayList.push(d);
-  const groups = new Map();
-  for (const a of ads) {
-    const k = a.img_key || 'ad:' + a.id;
-    let g = groups.get(k);
-    if (!g) groups.set(k, g = { key: k, grouped: !!a.img_key, ads: [], camps: new Map(), bms: new Set(), thumb: null, top: null,
-      spend: 0, impressions: 0, clicks: 0, sales: 0, revenue: 0, fb_purchases: 0, days_on: 0, active: false,
-      day: Object.fromEntries(dayList.map(d => [d, { spend: 0, sales: 0, revenue: 0, fb: 0 }])) });
-    g.ads.push(a.id);
-    for (const f of ['spend', 'impressions', 'clicks', 'sales', 'revenue', 'fb_purchases']) g[f] += a[f] || 0;
-    if (a.bm_name) g.bms.add(a.bm_name);
-    if (a.status === 'ACTIVE') g.active = true;
-    if (a.days_on != null) g.days_on = Math.max(g.days_on, a.days_on);
-    if (!g.top || a.spend > g.top.spend) g.top = a;
-    if (a.thumb_url && (!g.thumb || a.spend >= g.top.spend)) g.thumb = a.thumb_url;
-    const c = g.camps.get(a.campaign_id) || { id: a.campaign_id, name: a.campaign_name, bm: a.bm_name, account: a.account_name, on: false, spend: 0, sales: 0, revenue: 0, fb_purchases: 0 };
-    c.spend += a.spend; c.sales += a.sales; c.revenue += a.revenue; c.fb_purchases += a.fb_purchases; if (a.status === 'ACTIVE') c.on = true;
-    g.camps.set(a.campaign_id, c);
-    for (const x of series[a.id] || []) { const b = g.day[x.day]; if (b) { b.spend += x.spend; b.sales += x.sales; b.revenue += x.revenue; b.fb += x.fb_purchases; } }
-  }
-  const roiOf = (rev, sp) => metrics.div(rev, sp * (1 + tax));
-  const minSpend = Math.max(15, tg.cpa_target * 2);
-  const out = [...groups.values()].map(g => {
-    const s = dayList.map(d => { const b = g.day[d]; return { day: d, spend: r2(b.spend), sales: byReal ? b.sales : b.fb, roi: byReal ? r2(roiOf(b.revenue, b.spend)) : null }; });
-    const sales = byReal ? g.sales : g.fb_purchases;
-    // situação: compara os últimos 3 dias com os 4 anteriores
-    const last = s.slice(-3), prev = s.slice(-7, -3);
-    const sum = (l, f) => l.reduce((t, x) => t + (x[f] || 0), 0);
-    const ls = sum(last, 'sales'), lsp = sum(last, 'spend'), ps = sum(prev, 'sales'), psp = sum(prev, 'spend');
-    let state = 'good';
-    if (!g.active) state = 'off';
-    else if (g.days_on <= 2) state = 'new';
-    else if (lsp >= minSpend && ls === 0) state = 'stopped';
-    else if (ps > 0 && psp > 0 && metrics.div(ls, lsp) < metrics.div(ps, psp) * 0.7) state = 'falling';
-    const camps = [...g.camps.values()].map(c => ({ ...c, spend: r2(c.spend), roi: r2(roiOf(c.revenue, c.spend)), sales: byReal ? c.sales : c.fb_purchases })).sort((a, b) => b.spend - a.spend);
-    return { key: g.key, grouped: g.grouped, name: g.top.name, thumb: g.thumb, days_on: g.days_on, active: g.active, state,
-      ads: g.ads.length, campaigns: camps.length, bms: [...g.bms], spend: r2(g.spend), sales, revenue: r2(g.revenue),
-      roi: byReal ? r2(roiOf(g.revenue, g.spend)) : null, cpa: sales ? r2(g.spend / sales) : null,
-      ctr: r2(metrics.div(g.clicks, g.impressions) * 100), series: s, camps };
-  });
-  out.sort((a, b) => b.sales - a.sales || b.spend - a.spend);
-  out.forEach((x, i) => { x.rank = x.spend >= minSpend && x.sales > 0 ? i + 1 : null; });
-  res.json({ from, to, days, by: byReal ? 'real' : 'face', roi_goal: tg.roi_goal, images: out,
-    ungrouped: out.filter(x => !x.grouped).length });
+  res.json(await creatives.byImage(T.addDays(to, -(days - 1)), to, bmParam(req.query.bm)));
 }));
 
 // avisos graves das últimas 24h (barra fixa no topo do app)
@@ -615,7 +567,9 @@ router.delete('/notes/:id', wrap(async (req, res) => { await db.query('DELETE FR
 
 // ── RELATÓRIOS ───────────────────────────────────────────────────────────
 router.get('/reports', wrap(async (req, res) => {
-  const { rows } = await db.query(`SELECT id, to_char(day,'YYYY-MM-DD') AS day, title, summary, source, created_at, content->'kpis' AS kpis FROM reports ORDER BY day DESC, id DESC LIMIT 30`);
+  const period = reports.PERIODS.includes(req.query.period) ? req.query.period : 'day';
+  const { rows } = await db.query(`SELECT id, to_char(day,'YYYY-MM-DD') AS day, to_char(period_end,'YYYY-MM-DD') AS period_end, period, title, summary, source, created_at, updated_at, content->'kpis' AS kpis
+    FROM reports WHERE period = $1 ORDER BY day DESC, id DESC LIMIT 30`, [period]);
   res.json(rows);
 }));
 router.get('/reports/:id', wrap(async (req, res) => res.json(await reports.full(req.params.id))));

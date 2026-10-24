@@ -885,19 +885,38 @@ function approveCard(a) {
 }
 
 /* ── RELATÓRIOS ── */
-let repId = null;
+let repId = null, relPer = store.get('argos-relper') || 'day';
+const REL_PER = [['day', 'Dia'], ['week', 'Semana'], ['month', 'Mês']];
+const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const perLabel = r => r.period === 'week' ? `Semana ${shortDay(r.day)} – ${shortDay(r.period_end || addD(r.day, 6))}`
+  : r.period === 'month' ? `${MONTHS[+r.day.slice(5, 7) - 1].replace(/^./, c => c.toUpperCase())} ${r.day.slice(0, 4)}${r.period_end && r.period_end.slice(8) !== String(new Date(+r.day.slice(0, 4), +r.day.slice(5, 7), 0).getDate()) ? ` · até ${shortDay(r.period_end)}` : ''}` : dayLabel(r.day);
+const relSeg = () => `<div class="seg" role="group" aria-label="Período">${REL_PER.map(([k, l]) => `<button aria-pressed="${relPer === k}" data-act="relPer" data-v="${k}">${l}</button>`).join('')}</div>`;
+// período × anterior, calculado pelo próprio Argos (não depende do texto do Claude)
+function perTotals(r) {
+  if (!r.totals) return '';
+  const a = r.totals, b = r.prev_totals || {};
+  const row = (l, v, pv, fmt, inv) => { const d = pv ? (v - pv) / Math.abs(pv) * 100 : null; return `<div class="kbox"><span class="eyebrow" style="font-size:10px">${l}</span><b class="num" style="font-size:19px">${fmt(v)}</b><span class="faint" style="font-size:11.5px">${pv ? `antes ${fmt(pv)} · <span class="${(d > 0) !== !!inv ? 'up' : 'down'}">${d > 0 ? '+' : '−'}${nf(Math.abs(d), 0)}%</span>` : '&nbsp;'}</span></div>`; };
+  return `<div class="card"><div class="card-h"><h3>${r.period === 'week' ? 'Semana × semana anterior' : 'Mês × mesmo período do mês anterior'}</h3><span class="hint">Números do Argos</span></div><div class="card-b"><div class="grid g-4" style="gap:10px">
+    ${row('Investido', a.spend, b.spend, v => brl(v))}${row('Faturamento', a.revenue, b.revenue, v => brl(v))}${row('Lucro', a.profit, b.profit, v => brl(v))}${row('ROI real', a.roi_real, b.roi_real, f2)}</div></div></div>`;
+}
+function perExtras(c) {
+  const pg = c.progress;
+  return `${pg ? `<div class="card card-b" style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px"><b>${esc(pg.label || 'Meta')}</b><span class="num">${pg.unit === 'R$' ? brl(pg.done) : nf(pg.done)} / ${pg.unit === 'R$' ? brl(pg.target) : nf(pg.target)}</span></div><div class="bbar"><i style="width:${Math.min(100, div(pg.done, pg.target) * 100)}%"></i></div></div>` : ''}
+    ${(c.scorecard || []).length ? `<div class="card"><div class="card-h"><h3>Placar das decisões</h3><span class="hint">O que foi feito e se deu certo</span></div><div class="card-b rows">${c.scorecard.map(k => `<div class="row"><div class="ico-box ib-${k.tone === 'good' ? 'good' : k.tone === 'bad' ? 'bad' : 'face'}">${ic(k.tone === 'bad' ? 'x' : k.tone === 'good' ? 'check' : 'info')}</div><div><div class="t">${esc(k.decision)}</div><div class="d" style="white-space:normal">${esc(k.result)}</div></div></div>`).join('')}</div></div>` : ''}
+    ${(c.next || []).length ? `<div class="card card-b report" style="padding:20px 24px"><h4 style="margin-top:0">Plano ${pg ? 'pro resto do mês' : 'da próxima semana'}</h4><ul>${c.next.map(t => `<li><span style="color:var(--gold)">${ic('flag')}</span><span>${esc(t)}</span></li>`).join('')}</ul></div>` : ''}`;
+}
 async function viewRel() {
-  const [list, nums] = await Promise.all([api('/reports'), api('/daynums')]);
-  sub('A análise diária do Claude, com gráficos');
-  topRight('');
+  const [list, nums] = await Promise.all([api('/reports?period=' + relPer), api('/daynums')]);
+  sub(relPer === 'day' ? 'A análise diária do Claude, com gráficos' : relPer === 'week' ? 'Fecha toda segunda às 07:00 e fica guardada' : 'Atualizada todo dia às 07:00; fecha no dia 1º');
+  topRight(relSeg());
   if (!repId && list.length) repId = list[0].id;
   const rep = repId ? await api('/reports/' + repId) : null;
   $('#view').innerHTML = `<div class="grid g-rel">
-    <div style="display:grid;gap:18px;min-width:0">${rep ? reportHtml(rep) : `<div class="card"><div class="empty" style="padding:48px 18px">${ic('doc')}<b style="color:var(--fg)">Nenhuma análise ainda</b>A primeira chega às 07:00, depois que a rotina do Claude for ligada (veja Conexões).</div></div>`}</div>
+    <div style="display:grid;gap:18px;min-width:0">${rep ? reportHtml(rep) : `<div class="card"><div class="empty" style="padding:48px 18px">${ic('doc')}<b style="color:var(--fg)">Nenhuma análise ${relPer === 'day' ? 'ainda' : relPer === 'week' ? 'da semana ainda' : 'do mês ainda'}</b>${relPer === 'week' ? 'A primeira chega na segunda às 07:00, com a semana fechada.' : relPer === 'month' ? 'A primeira chega amanhã às 07:00 e vai sendo atualizada todo dia.' : 'A primeira chega às 07:00, depois que a rotina do Claude for ligada (veja Conexões).'}</div></div>`}</div>
     <div style="display:grid;gap:18px;align-content:start;min-width:0">
-      <div class="card"><div class="card-h"><h3>Números do dia</h3><span class="hint">Automático, direto do Face e das vendas</span></div>
-        <div class="card-b tbl-wrap"><table><thead><tr><th>Dia</th><th>Cliques</th><th>Compras</th><th>ROI real</th></tr></thead><tbody>${nums.filter(n => n.spend > 0 || n.sales > 0).map(n => `<tr title="Entraram ${nf(n.visitors)} · conversão ${pct(n.conv, 2)}"><td class="txt">${dayLabel(n.day)}</td><td>${nf(n.clicks)}</td><td>${nf(n.sales)}</td><td><span class="pill p-${n.roi >= ME.targets.roi_goal ? 'good' : n.roi >= 1.3 ? 'gold' : n.roi >= 1.05 ? 'warn' : 'bad'}">${f2(n.roi)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="txt muted">Sem dados ainda</td></tr>'}</tbody></table></div></div>
-      <div class="card"><div class="card-h"><h3>Análises anteriores</h3></div><div class="card-b rows">${list.length ? list.map(r => `<button class="row" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;${r.id === repId ? 'color:var(--gold)' : ''}" data-act="openRep" data-id="${r.id}"><div class="ico-box ib-${r.id === repId ? 'gold' : 'face'}">${ic('doc')}</div><div><div class="t">${dayLabel(r.day)}${r.source === 'demo' ? ' · exemplo' : ''}</div><div class="d" style="white-space:normal">${esc(r.title)}</div></div><span class="when">${ic('arrowR')}</span></button>`).join('') : '<div class="faint">Nenhuma ainda.</div>'}</div></div>
+      ${relPer === 'day' ? `<div class="card"><div class="card-h"><h3>Números do dia</h3><span class="hint">Automático, direto do Face e das vendas</span></div>
+        <div class="card-b tbl-wrap"><table><thead><tr><th>Dia</th><th>Cliques</th><th>Compras</th><th>ROI real</th></tr></thead><tbody>${nums.filter(n => n.spend > 0 || n.sales > 0).map(n => `<tr title="Entraram ${nf(n.visitors)} · conversão ${pct(n.conv, 2)}"><td class="txt">${dayLabel(n.day)}</td><td>${nf(n.clicks)}</td><td>${nf(n.sales)}</td><td><span class="pill p-${n.roi >= ME.targets.roi_goal ? 'good' : n.roi >= 1.3 ? 'gold' : n.roi >= 1.05 ? 'warn' : 'bad'}">${f2(n.roi)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="txt muted">Sem dados ainda</td></tr>'}</tbody></table></div></div>` : ''}
+      <div class="card"><div class="card-h"><h3>Análises anteriores</h3></div><div class="card-b rows">${list.length ? list.map(r => `<button class="row" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;${r.id === repId ? 'color:var(--gold)' : ''}" data-act="openRep" data-id="${r.id}"><div class="ico-box ib-${r.id === repId ? 'gold' : 'face'}">${ic('doc')}</div><div><div class="t">${perLabel(r)}${r.source === 'demo' ? ' · exemplo' : ''}</div><div class="d" style="white-space:normal">${esc(r.title)}</div></div><span class="when">${ic('arrowR')}</span></button>`).join('') : '<div class="faint">Nenhuma ainda.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>Como a análise chega</h3></div><div class="card-b rows">
         <div class="row"><div class="ico-box ib-gold">${ic('clock')}</div><div><div class="t">Todo dia às 07:00</div><div class="d">O Claude roda sozinho na nuvem, lê o Argos (Face + app + vendas) e escreve a análise</div></div></div>
         <div class="row"><div class="ico-box ib-info">${ic('bell')}</div><div><div class="t">Notificação no celular</div><div class="d">Resumo em uma linha; toque pra abrir aqui</div></div></div>
@@ -908,20 +927,22 @@ function reportHtml(r) {
   const c = r.content || {};
   const done = JSON.parse(store.get('radar-todo-' + r.id) || '[]');
   return `<div class="card card-b report" style="padding:24px 26px">
-      <div class="toolbar" style="margin-bottom:12px"><span class="pill p-gold">${r.source === 'demo' ? 'Exemplo' : 'Análise do Claude'}</span><span class="faint" style="font-size:12px">Sobre ${dayLabel(r.day)} · publicado ${new Date(r.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span></div>
+      <div class="toolbar" style="margin-bottom:12px"><span class="pill p-gold">${r.source === 'demo' ? 'Exemplo' : r.period === 'week' ? 'Análise da semana' : r.period === 'month' ? 'Análise do mês' : 'Análise do Claude'}</span><span class="faint" style="font-size:12px">Sobre ${perLabel(r)} · ${r.updated_at ? 'atualizado' : 'publicado'} ${new Date(r.updated_at || r.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span></div>
       <h2>${esc(r.title)}</h2>
       ${(c.kpis || []).length ? `<div class="grid g-4" style="gap:10px;margin-top:16px">${c.kpis.map(k => `<div class="kbox"><span class="eyebrow" style="font-size:10px">${esc(k.label)}</span><b class="num ${k.tone === 'bad' ? 'down' : k.tone === 'good' ? 'up' : ''}" style="font-size:20px">${esc(k.value)}</b><span class="faint" style="font-size:11.5px">${esc(k.note)}</span></div>`).join('')}</div>` : ''}
     </div>
-    ${(c.changes || []).length || (c.normal || []).length ? `<div class="card"><div class="card-h"><h3>O que mudou</h3><span class="hint">Só aparece o que fugiu do normal dos últimos 7 dias</span></div><div class="card-b" style="display:grid;gap:12px">
+    ${(c.changes || []).length || (c.normal || []).length ? `<div class="card"><div class="card-h"><h3>O que mudou</h3><span class="hint">${r.period && r.period !== 'day' ? 'Contra o período anterior' : 'Só aparece o que fugiu do normal dos últimos 7 dias'}</span></div><div class="card-b" style="display:grid;gap:12px">
       <div class="grid g-3" style="gap:12px">${(c.changes || []).map(x => `<div class="chg"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span style="font-weight:600;font-size:13px">${esc(x.title)}</span><span class="pill p-${x.tone}">${x.tone === 'bad' ? 'Grave' : x.tone === 'good' ? 'Bom' : 'Atenção'}</span></div><b class="num ${x.tone === 'bad' ? 'down' : x.tone === 'good' ? 'up' : 'w'}" style="font-size:22px">${esc(x.value)}</b><span class="faint" style="font-size:11.5px">${esc(x.note)}</span>${spark(x.series, css(x.tone === 'bad' ? '--bad' : x.tone === 'good' ? '--good' : '--warn'))}<span style="font-size:12px;color:var(--muted)">${esc(x.hint)}</span></div>`).join('')}</div>
       ${(c.normal || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px"><span class="muted">Normal, sem nada a dizer:</span>${c.normal.map(n => `<span class="pill p-face">${esc(n)}</span>`).join('')}</div>` : ''}</div></div>` : ''}
+    ${perTotals(r)}${perExtras(c)}
+    ${r.days_all && r.days_all.length ? `<div class="card"><div class="card-h"><h3>Dia a dia</h3><div class="right legend"><span><i class="sw face"></i>Gasto</span><span><i class="sw gold"></i>Faturamento real</span><span><i class="sw line"></i>ROI real</span></div></div><div class="card-b">${chart7(r.days_all)}</div></div>` : ''}
     ${r.days7 && r.days7.length ? `<div class="card"><div class="card-h"><h3>Últimos 7 dias</h3><div class="right legend"><span><i class="sw face"></i>Gasto</span><span><i class="sw gold"></i>Faturamento real</span><span><i class="sw line"></i>ROI real</span></div></div><div class="card-b">${chart7(r.days7)}</div></div>` : ''}
     ${(c.campaigns || []).length ? `<div class="card"><div class="card-h"><h3>Campanha por campanha</h3><span class="hint">ROI real dos 7 dias e a sugestão</span></div><div class="card-b tbl-wrap"><table><thead><tr><th>Campanha</th><th>No ar há</th><th style="text-align:left">ROI real · 7 dias</th><th>No dia</th><th style="text-align:left">Sugestão</th></tr></thead><tbody>
       ${c.campaigns.map(k => `<tr><td class="txt"><span class="cname">${esc(k.name)}</span></td><td>${k.days_on == null ? '—' : k.days_on + ' dias'}</td><td style="width:130px">${spark(k.series, css('--' + (k.tone === 'gold' || k.tone === 'face' || k.tone === 'info' ? 'gold' : k.tone)), 120, 28)}</td><td class="real-v">${k.roi != null ? f2(k.roi) : '—'}</td>
         <td class="txt l"><div style="display:flex;gap:8px;align-items:center;justify-content:space-between"><span class="pill p-${k.tone}">${esc(k.suggestion)}</span>${k.action_id && k.action_status === 'pending' ? `<button class="btn sm primary" data-act="approve" data-id="${k.action_id}">${ic('check')}Aprovar</button>` : k.action_status === 'executed' ? '<span class="faint" style="font-size:12px">feito</span>' : k.action_status === 'ignored' ? '<span class="faint" style="font-size:12px">ignorado</span>' : ''}</div></td></tr>`).join('')}</tbody></table></div></div>` : ''}
     <div class="card card-b report" style="padding:22px 26px">
       ${(c.analysis || []).length ? `<h4 style="margin-top:0">A análise</h4>${c.analysis.map(p => `<p>${esc(p)}</p>`).join('')}` : ''}
-      ${(c.todo || []).length ? `<h4>O que fazer hoje</h4><ul>${c.todo.map((t, i) => `<li><button class="check" role="checkbox" aria-checked="${done.includes(i)}" data-act="todo" data-rep="${r.id}" data-i="${i}" aria-label="Feito">${done.includes(i) ? ic('check') : ''}</button><span>${esc(t)}</span></li>`).join('')}</ul>` : ''}
+      ${(c.todo || []).length ? `<h4>${r.period && r.period !== 'day' ? 'O que fazer' : 'O que fazer hoje'}</h4><ul>${c.todo.map((t, i) => `<li><button class="check" role="checkbox" aria-checked="${done.includes(i)}" data-act="todo" data-rep="${r.id}" data-i="${i}" aria-label="Feito">${done.includes(i) ? ic('check') : ''}</button><span>${esc(t)}</span></li>`).join('')}</ul>` : ''}
     </div>`;
 }
 
@@ -1047,15 +1068,20 @@ async function mob(t) {
       B.innerHTML = `<div class="card card-b rows">${al.length ? al.map(alertRow).join('') : `<div class="empty">${ic('check')}Nenhum alerta.</div>`}</div>`;
       api('/alerts/seen', { body: {} }).catch(() => {});
     } else if (t === 'rel') {
-      const list = await api('/reports');
-      if (!list.length) { B.innerHTML = `<div class="empty">${ic('doc')}A primeira análise chega às 07:00.</div>`; return; }
+      const list = await api('/reports?period=' + relPer);
+      const seg = `<div class="seg mob-seg" role="group" aria-label="Período">${REL_PER.map(([k, l]) => `<button aria-pressed="${relPer === k}" data-act="relPerMob" data-v="${k}">${l}</button>`).join('')}</div>`;
+      if (!list.length) { B.innerHTML = seg + `<div class="empty">${ic('doc')}${relPer === 'week' ? 'A primeira análise da semana chega na segunda às 07:00.' : relPer === 'month' ? 'A análise do mês chega amanhã às 07:00 e é atualizada todo dia.' : 'A primeira análise chega às 07:00.'}</div>`; return; }
       const r = await api('/reports/' + list[0].id);
       const c = r.content || {};
-      B.innerHTML = `<div class="card card-b" style="display:grid;gap:10px"><span class="pill p-gold" style="justify-self:start">${dayLabel(r.day)}${r.source === 'demo' ? ' · exemplo' : ''}</span>
+      const T2 = r.totals, P2 = r.prev_totals || {};
+      B.innerHTML = seg + `<div class="card card-b" style="display:grid;gap:10px"><span class="pill p-gold" style="justify-self:start">${perLabel(r)}${r.source === 'demo' ? ' · exemplo' : ''}</span>
         <div style="font-family:var(--f-display);font-size:19px;font-weight:700;line-height:1.2">${esc(r.title)}</div>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px">${(c.kpis || []).map(k => `<div class="kbox"><span class="eyebrow" style="font-size:9.5px">${esc(k.label)}</span><b class="num ${k.tone === 'bad' ? 'down' : k.tone === 'good' ? 'up' : ''}" style="font-size:17px">${esc(k.value)}</b><span class="faint" style="font-size:11px">${esc(k.note)}</span></div>`).join('')}</div></div>
         ${(c.changes || []).map(x => `<div class="chg"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13px">${esc(x.title)}</b><b class="num ${x.tone === 'bad' ? 'down' : 'w'}">${esc(x.value)}</b></div>${spark(x.series, css(x.tone === 'bad' ? '--bad' : '--warn'), 300, 30)}<span class="muted" style="font-size:12px">${esc(x.hint)}</span></div>`).join('')}
-        <div class="card card-b" style="display:grid;gap:8px"><div class="eyebrow">Fazer hoje</div>${(c.todo || []).map(t => `<div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--gold)">${ic('check')}</span>${esc(t)}</div>`).join('')}</div>
+        ${T2 ? `<div class="card card-b" style="display:grid;gap:7px"><div class="eyebrow">${r.period === 'week' ? 'Contra a semana anterior' : 'Contra o mês anterior'}</div>${[['Investido', T2.spend, P2.spend, v => brl(v)], ['Lucro', T2.profit, P2.profit, v => brl(v)], ['ROI real', T2.roi_real, P2.roi_real, f2]].map(([l, v, pv, fm]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${l}</span><span class="num"><b>${fm(v)}</b> <span class="faint" style="font-size:11.5px">antes ${fm(pv || 0)}</span></span></div>`).join('')}</div>` : ''}
+        ${c.progress ? `<div class="card card-b" style="display:grid;gap:7px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${esc(c.progress.label)}</b><span class="num">${brl(c.progress.done)} / ${brl(c.progress.target)}</span></div><div class="bbar"><i style="width:${Math.min(100, div(c.progress.done, c.progress.target) * 100)}%"></i></div></div>` : ''}
+        ${(c.next || []).length ? `<div class="card card-b" style="display:grid;gap:8px"><div class="eyebrow">Plano</div>${c.next.map(t => `<div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--gold)">${ic('flag')}</span>${esc(t)}</div>`).join('')}</div>` : ''}
+        ${(c.todo || []).length ? `<div class="card card-b" style="display:grid;gap:8px"><div class="eyebrow">${r.period === 'day' ? 'Fazer hoje' : 'Fazer'}</div>${(c.todo || []).map(t => `<div style="display:flex;gap:8px;font-size:13px"><span style="color:var(--gold)">${ic('check')}</span>${esc(t)}</div>`).join('')}</div>` : ''}
         <button class="btn block" data-act="fullRel">${ic('monitor')}Ver a análise completa</button>`;
     }
   } catch (err) { if (err.message !== 'Faça login') B.innerHTML = `<div class="empty">${ic('alert')}${esc(err.message)}</div>`; }
@@ -1196,6 +1222,8 @@ const ACT = {
   async undo(el) { el.disabled = true; try { await api(`/actions/${el.dataset.id}/undo`, { body: {} }); toast('Desfeito'); } catch (e) { toast(e.message, true); } reload(); },
   async pauseAll() { const g = (await api('/rules')).guards; await api('/settings/guards', { method: 'PATCH', body: { paused_all: !g.paused_all } }); toast(g.paused_all ? 'Regras retomadas' : 'Regras pausadas'); viewRegras(); },
   openRep(el) { repId = +el.dataset.id; viewRel(); },
+  relPer(el) { relPer = el.dataset.v; store.set('argos-relper', relPer); repId = null; viewRel(); },
+  relPerMob(el) { relPer = el.dataset.v; store.set('argos-relper', relPer); mob('rel'); },
   todo(el) { const k = 'radar-todo-' + el.dataset.rep; const s = new Set(JSON.parse(store.get(k) || '[]')); const i = +el.dataset.i; s.has(i) ? s.delete(i) : s.add(i); store.set(k, JSON.stringify([...s])); const on = s.has(i); el.setAttribute('aria-checked', on); el.innerHTML = on ? ic('check') : ''; },
   connectBm() { connectBmSheet(); },
   async copyUtm() { const t = $('#utmCode').textContent; try { await navigator.clipboard.writeText(t); toast('Copiado'); } catch (e) { const r = document.createRange(); r.selectNodeContents($('#utmCode')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Selecionado: copie com Ctrl+C'); } },

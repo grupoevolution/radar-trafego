@@ -35,6 +35,13 @@ vendas por Pix). Todo dia às 07:00 (Brasília):
    curl -s -X POST -H "Authorization: Bearer $RADAR_KEY" -H "Content-Type: application/json" \
         -d @relatorio.json $RADAR_URL/api/reports
 4. Confirme que a resposta veio com "ok": true.
+5. SEMANA (só às segundas): leia ?period=week&day=<ontem> e publique com
+   "period": "week" (veredito, o que funcionou, imagens campeãs/cansadas,
+   padrões, placar das decisões, plano da próxima semana).
+6. MÊS (todo dia): leia ?period=month&day=<ontem> e publique com
+   "period": "month" (ritmo da meta, projeção, lucro que falta por dia).
+   No dia 1º: day = último dia do mês anterior e "closed": true.
+   Publicar de novo o mesmo período atualiza, não duplica.
 ```
 
 Variáveis da rotina: `RADAR_URL` e `RADAR_KEY` (= `CLAUDE_API_KEY`).

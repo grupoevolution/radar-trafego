@@ -525,3 +525,4 @@ body{padding-top:var(--abh,0px)}
 .side{top:var(--abh,0px);height:calc(100vh - var(--abh,0px))}
 .top{top:calc(env(safe-area-inset-top,0px) + var(--abh,0px))}
 .mob{padding-top:max(env(safe-area-inset-top,0px) - var(--abh,0px),0px)}
+.mob-seg{justify-self:start}
