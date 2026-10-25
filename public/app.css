@@ -550,3 +550,4 @@ tfoot tr.tot td{border-top:1px solid var(--line-2);background:var(--surface-2);f
 .ring.sm .c span{font-size:9px}
 .rc-goal{font-size:10.5px;color:var(--faint);font-family:var(--f-mono);white-space:nowrap}
 .rc-goal s{opacity:.7}
+.bm-tag.down-tag{background:var(--bad-soft);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}

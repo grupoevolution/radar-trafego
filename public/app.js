@@ -672,14 +672,14 @@ async function viewCamp() {
   $('#view').innerHTML = `
   ${bmNote()}
   <div class="banner note">${ic('info')}<div><h2 style="font-size:16px">A coluna azul é a venda que caiu de verdade</h2>
-    <p>Só aparecem campanhas de contas ativas. As vendas reais por campanha vêm da etiqueta do link (UTM): campanhas antigas sem etiqueta aparecem como "Sem etiqueta" e o ROI real delas fica no total do dia. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
+    <p>Aparecem as campanhas de contas ativas e, nos dias em que gastaram, as de contas que caíram (marcadas com "conta caiu"). As vendas reais por campanha vêm da etiqueta do link (UTM): campanhas antigas sem etiqueta aparecem como "Sem etiqueta" e o ROI real delas fica no total do dia. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Nível"><button aria-pressed="${isC}" data-act="cpLevel" data-v="campaign">Campanhas</button><button aria-pressed="${!isC}" data-act="cpLevel" data-v="ad">Anúncios</button></div>
     <button class="chip" data-act="cpActive">${ic(cp.active ? 'check' : 'list')}${cp.active ? 'Só ativas ou que gastaram' : 'Todas'}</button>
     <span class="faint" style="font-size:12.5px;margin-left:auto">${rows.length} ${isC ? 'campanhas' : 'anúncios'} · ordenado por gasto</span>
   </div>
   <div class="card"><div class="tbl-wrap">${rows.length ? `<table><thead><tr><th>${isC ? 'Campanha' : 'Anúncio'}</th><th>Ligada</th><th>No ar há</th>${isC ? '<th>Orçamento/dia</th>' : ''}<th>Gasto</th><th>CPM</th><th>CTR</th><th>Freq.</th><th>Vendas Face</th><th>Vendas reais</th><th>Custo/venda real</th><th>ROI real</th><th style="text-align:left">7 dias</th><th>Sinal</th></tr></thead><tbody>
-    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}"><td class="txt"><div class="cname">${esc(c.name)}<small>${c.bm_name ? `<span class="bm-tag">${esc(c.bm_name)}</span>` : ''}${esc(isC ? (c.account_name || '') : (c.account_name || '') + ' · ' + (c.campaign_name || ''))}</small></div></td>
+    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}"><td class="txt"><div class="cname">${esc(c.name)}<small>${c.bm_name ? `<span class="bm-tag">${esc(c.bm_name)}</span>` : ''}${c.account_status != null && c.account_status !== 1 ? '<span class="bm-tag down-tag">conta caiu</span>' : ''}${esc(isC ? (c.account_name || '') : (c.account_name || '') + ' · ' + (c.campaign_name || ''))}</small></div></td>
       <td><button class="tog" role="switch" aria-checked="${c.status === 'ACTIVE'}" data-act="tog" data-i="${i}" aria-label="Ligar ou desligar ${esc(c.name)}"></button></td>
       <td class="${c.days_on >= 12 ? 'w' : ''}">${c.days_on == null ? '—' : c.days_on + (c.days_on === 1 ? ' dia' : ' dias')}</td>
       ${isC ? `<td>${c.budget ? `<button class="budget" data-act="bud" data-i="${i}">${brl(c.budget)} ${ic('edit')}</button>` : '<span class="faint">—</span>'}</td>` : ''}
