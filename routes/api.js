@@ -271,7 +271,17 @@ router.put('/goals', wrap(async (req, res) => {
 // ── CRIATIVOS ────────────────────────────────────────────────────────────
 // ranking: com venda real (etiqueta) vale o ROI real; sem etiqueta, vale o que o Face mede:
 // custo por compra do Face e, no empate, CTR. Só entra no ranking quem gastou o mínimo.
-router.get('/creatives', wrap(async (req, res) => {
+// os padrões dos criativos varrem 60 dias de anúncios: guarda o resultado por 10 min (mesma BM/dia)
+const creCache = new Map();
+router.get('/creatives', wrap(async (req, res, next) => {
+  const ck = `${req.query.bm || ''}|${req.query.from || ''}|${req.query.to || ''}|${T.today()}`;
+  const hit = creCache.get(ck);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return res.json(hit.body);
+  const send = res.json.bind(res);
+  res.json = body => { creCache.set(ck, { at: Date.now(), body }); if (creCache.size > 20) creCache.delete(creCache.keys().next().value); return send(body); };
+  return creativesFull(req, res, next);
+}));
+const creativesFull = wrap(async (req, res) => {
   const to = dayParam(req.query.to, T.today());
   const from7 = dayParam(req.query.from, T.addDays(to, -6)), from30 = T.addDays(to, -29);
   const bm = bmParam(req.query.bm);
@@ -333,7 +343,7 @@ router.get('/creatives', wrap(async (req, res) => {
       life: Object.entries(life).map(([key, n]) => ({ key, n }))
     }
   });
-}));
+});
 
 // ── CRIATIVOS POR IMAGEM ─────────────────────────────────────────────────
 // cada item = uma imagem (mesmo hash), somando todos os anúncios/campanhas/contas onde ela roda
