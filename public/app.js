@@ -364,7 +364,13 @@ function renderDesk() {
 }
 
 let lastGo = null;
+// o "hoje" do Argos vem do servidor quando a tela abre; se a aba ficou aberta de um dia pro outro
+// (ou o app instalado voltou do segundo plano), renova — senão Campanhas/Criativos pediam o dia anterior
+const brToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+async function freshDay() { if (ME && brToday() !== ME.today) { try { ME = await api('/me'); } catch (e) {} } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ME && brToday() !== ME.today) { freshDay().then(() => render()); } });
 async function go(k) {
+  await freshDay();
   view = k; store.set('radar-view', k);
   $$('.nav').forEach(b => b.setAttribute('aria-current', b.dataset.go === k));
   if (k !== 'geral') dpOpen = false;
@@ -1070,6 +1076,7 @@ async function renderMobile() {
   mob(mobTab);
 }
 async function mob(t) {
+  await freshDay();
   mobTab = t;
   let pend = [];
   try { pend = await api('/actions?status=pending'); } catch (e) { return; }

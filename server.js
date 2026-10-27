@@ -29,7 +29,8 @@ async function boot() {
     res.json({ ok: true, db: dbOk, demo: process.env.DEMO_MODE === '1', uptime_s: Math.round(process.uptime()) });
   });
 
-  app.use('/api', api);
+  // dado ao vivo: nada de /api guardado em cache pelo navegador
+  app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, api);
   // cada deploy gera uma versão nova dos arquivos: o celular (PWA) nunca fica preso numa cópia velha
   const BUILD = Date.now().toString(36);
   const sendIndex = (req, res) => {
