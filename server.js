@@ -9,6 +9,7 @@ const db = require('./db');
 const migrations = require('./lib/migrations');
 const notify = require('./lib/notify');
 const collector = require('./lib/collector');
+const appwatch = require('./lib/appwatch');
 const api = require('./routes/api');
 
 const PORT = parseInt(process.env.PORT || '3200', 10);
@@ -53,6 +54,7 @@ async function boot() {
   await notify.initVapid();
   app.listen(PORT, () => console.log(`[server] Radar no ar: http://localhost:${PORT}${process.env.DEMO_MODE === '1' ? '  (MODO DEMONSTRAÇÃO)' : ''}`));
   collector.start();
+  appwatch.start(); // vigia da área de membros (notifica app lento/fora do ar)
 }
 
 boot().catch(err => {

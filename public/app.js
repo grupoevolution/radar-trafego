@@ -534,7 +534,7 @@ function andromedaRow(o) {
   if (!a) return `<div class="ico-box ib-info">${ic('andro')}</div><div><div class="t">Andrômeda: aguardando o primeiro envio</div></div>`;
   return `<div class="ico-box ${a.ok ? 'ib-good' : 'ib-bad'}">${ic(a.ok ? 'check' : 'alert')}</div><div><div class="t">${a.ok ? 'Andrômeda recebeu o gasto' : 'Andrômeda não recebeu o último envio'}</div><div class="d">${brl(a.total, 2)} somado de todas as contas · ${hhmm(a.sent_at)}${a.ok ? '' : ' · ' + esc(a.error || 'erro ' + a.status_code)}</div></div>`;
 }
-const ALERT_IC = { account_down: 'alert', token: 'plug', rule: 'bolt', fatigue: 'image', roi_day: 'trend', coverage: 'info' };
+const ALERT_IC = { account_down: 'alert', token: 'plug', rule: 'bolt', fatigue: 'image', roi_day: 'trend', coverage: 'info', app_down: 'alert', app_slow: 'alert' };
 function alertRow(a) {
   return `<div class="row"><div class="ico-box ib-${a.severity === 'bad' ? 'bad' : a.severity === 'good' ? 'good' : a.severity === 'info' ? 'info' : 'warn'}">${ic(ALERT_IC[a.kind] || 'bell')}</div><div><div class="t">${esc(a.title)}</div><div class="d">${esc(a.detail || '')}</div></div><span class="when">${hhmm(a.created_at)}</span></div>`;
 }
@@ -1018,7 +1018,7 @@ async function viewInt() {
     <div class="card"><div class="card-h"><h3>Notificações neste aparelho</h3><span class="hint">${s.push_subs} aparelho${s.push_subs === 1 ? '' : 's'} recebendo</span></div><div class="card-b" style="display:grid;gap:10px">
       <div class="btns"><button class="btn sm primary" data-act="enablePush">${ic('bell')}${push === 'granted' ? 'Reativar neste aparelho' : 'Ativar neste aparelho'}</button><button class="btn sm" data-act="testPush">Mandar teste</button></div>
       <p class="faint" style="margin:0;font-size:12px">No iPhone: abra o Argos no Safari, toque em Compartilhar → "Adicionar à Tela de Início", abra pelo ícone e então ative.</p>
-      <div>${[['roi_day', 'ROI do dia', `Às ${(n.roi_hours || []).join('h, ')}h`], ['account_down', 'Conta ou BM caiu', 'Até 15 min'], ['ad_rejected', 'Anúncio reprovado ou conjunto com erro', 'Até 15 min'], ['approval', 'Pedido de aprovação', 'Na hora'], ['spend_no_sale', 'Campanha gastou sem vender', 'Na hora'], ['fatigue', 'Criativo cansando', '1× por dia'], ['report', 'Análise da manhã', '07:00']].map(([k, t, d]) => `<div class="nt"><div class="t"><b>${t}</b><span>${d}</span></div><button class="tog" role="switch" aria-checked="${n[k] !== false}" data-act="notifTog" data-k="${k}" aria-label="${t}"></button></div>`).join('')}</div>
+      <div>${[['roi_day', 'ROI do dia', `Às ${(n.roi_hours || []).join('h, ')}h`], ['account_down', 'Conta ou BM caiu', 'Até 15 min'], ['ad_rejected', 'Anúncio reprovado ou conjunto com erro', 'Até 15 min'], ['approval', 'Pedido de aprovação', 'Na hora'], ['spend_no_sale', 'Campanha gastou sem vender', 'Na hora'], ['fatigue', 'Criativo cansando', '1× por dia'], ['report', 'Análise da manhã', '07:00'], ['app_health', 'Área de membros lenta ou fora do ar', 'Até 2 min']].map(([k, t, d]) => `<div class="nt"><div class="t"><b>${t}</b><span>${d}</span></div><button class="tog" role="switch" aria-checked="${n[k] !== false}" data-act="notifTog" data-k="${k}" aria-label="${t}"></button></div>`).join('')}</div>
       <div class="field"><label for="roiHours">Horários do aviso de ROI (separados por vírgula)</label><input id="roiHours" value="${(n.roi_hours || []).join(', ')}"></div>
       <div class="btns"><button class="btn sm" data-act="saveHours">Salvar horários</button></div>
     </div></div>
