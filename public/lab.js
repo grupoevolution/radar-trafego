@@ -11,9 +11,11 @@ const BANDS = [['#25D366', 'Verde'], ['#FFC21A', 'Amarelo'], ['#E8212E', 'Vermel
 const FONTS = [['Archivo Black', 'Grossa (padrão)'], ['Anton', 'Alta e fina'], ['Montserrat', 'Redonda']];
 const TERMS = ['Casada', 'Solteira', 'Divorciada', 'Viúva'];
 const ST = { pronto: ['info', 'Pronto pra subir'], testando: ['warn', 'Testando'], campeao: ['good', 'Campeão'], morreu: ['bad', 'Morreu'] };
-const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', band: 'CLICA NO BOTÃO', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100 };
+const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100 };
+// jeitos de botão que já venderam: pílula (CLICA NO BOTÃO), barra no rodapé (CLIQUE EM SAIBA MAIS!), pílula com ícone do WhatsApp
+const BSTYLES = [['pill', 'Pílula'], ['bar', 'Barra no rodapé'], ['wa', 'Pílula com WhatsApp']];
 
-let LAB = null, tab = 'campeoes', imgSub = 'todas', tstSt = 'todos';
+let LAB = null, tab = 'campeoes', imgSub = 'todas', tstSt = 'todos', chSt = 'todos';
 const url = (it, v) => `/api/lab/file/${it.id}/${v}?v=${new Date(it.updated_at).getTime()}`;
 const has = (it, v) => (it.files || []).some(f => f.variant === v);
 const thumbV = it => has(it, '1x1') ? '1x1' : has(it, 'orig') ? 'orig' : '9x16';
@@ -97,7 +99,32 @@ function draw(cv, img, p, h) {
     stroked(ctx, p.line2, W / 2, y, Math.max(5, s2 * 0.12));
     y += s2 * 0.5 + 34 * k;
   }
-  if (p.band) {
+  if (p.line3) {
+    ctx.textAlign = 'center';
+    ctx.font = `600 ${Math.round(40 * k)}px "Montserrat", Arial, sans-serif`;
+    const s3 = fitFont(ctx, p.line3, 'Montserrat', Math.round(40 * k), W * 0.86);
+    ctx.font = `700 ${s3}px "Montserrat", Arial, sans-serif`;
+    stroked(ctx, p.line3, W / 2, y - 4 * k, Math.max(4, s3 * 0.14));
+    y += s3 * 0.5 + 30 * k;
+  }
+  if (p.band && p.bstyle === 'bar') { // barra inteira no rodapé (CLIQUE EM SAIBA MAIS!)
+    const fb = fitFont(ctx, p.band, p.font, Math.round(54 * k), W * 0.9), bh = fb * 1.7;
+    const by = h === W ? h - bh : h * 0.8; // no stories, acima da área que o botão do Instagram cobre
+    ctx.fillStyle = p.color; ctx.fillRect(0, by, W, bh);
+    const dark = p.color === '#FFC21A';
+    ctx.textAlign = 'center'; ctx.fillStyle = dark ? '#111' : '#fff';
+    if (!dark) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(p.band, W / 2, by + bh / 2); }
+    ctx.fillText(p.band, W / 2, by + bh / 2);
+  } else if (p.band && p.bstyle === 'wa') { // pílula com o ícone do WhatsApp na ponta
+    const fb = fitFont(ctx, p.band, p.font, Math.round(40 * k), W * 0.6), bh = fb * 1.9;
+    const bw = ctx.measureText(p.band).width + bh + 60, bx = (W - bw) / 2;
+    ctx.fillStyle = p.color === '#111111' ? '#111' : GREEN; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.stroke();
+    const r = bh * 0.36, cx = bx + bh / 2 + 4, cy = y + bh / 2;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, r / 5); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = Math.max(5, r / 3.2); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 0.55, Math.PI * 1.2); ctx.stroke(); ctx.lineCap = 'butt';
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(p.band, bx + bh + 20, cy);
+  } else if (p.band) {
     const fb = fitFont(ctx, p.band, p.font, Math.round(46 * k), W * 0.7);
     const bw = ctx.measureText(p.band).width + (p.arrow ? 110 : 64), bh = fb * 1.55, bx = (W - bw) / 2;
     ctx.fillStyle = p.color; roundRect(ctx, bx, y, bw, bh, 14); ctx.fill();
@@ -127,17 +154,19 @@ async function view() {
   if ($('#vSub')) A.sub('Campeões que já venderam · fotos pra criar · criativos em teste ligados às vendas pelo código no nome do anúncio');
   if ($('#topRight')) A.topRight(`<button class="btn sm primary" data-act="labNew">${ic('plus')}Novo criativo</button>`);
   const it = LAB.items;
-  const champs = it.filter(x => x.kind === 'campeao' || (x.kind === 'teste' && x.status === 'campeao'))
-    .sort((a, b) => (a.rank || 999) - (b.rank || 999) || ((b.result && b.result.sales) || 0) - ((a.result && a.result.sales) || 0) || new Date(b.created_at) - new Date(a.created_at));
+  const allCh = it.filter(x => x.kind === 'campeao' || (x.kind === 'teste' && x.status === 'campeao'));
+  const champs = allCh.filter(x => chSt === 'todos' || (chSt === 'atual') === !!x.live)
+    .sort((a, b) => (!!b.live - !!a.live) || (a.rank || 999) - (b.rank || 999) || ((b.result && b.result.sales) || 0) - ((a.result && a.result.sales) || 0) || new Date(b.created_at) - new Date(a.created_at));
   const imgs = it.filter(x => x.kind === 'imagem' && (imgSub === 'todas' || x.sub === imgSub));
   const tests = it.filter(x => x.kind === 'teste' && (tstSt === 'todos' || x.status === tstSt));
-  const cnt = { campeoes: champs.length, imagens: it.filter(x => x.kind === 'imagem').length, testes: it.filter(x => x.kind === 'teste').length };
+  const cnt = { campeoes: allCh.length, imagens: it.filter(x => x.kind === 'imagem').length, testes: it.filter(x => x.kind === 'teste').length };
   const R = LAB.rules, wk = LAB.week;
-  host().innerHTML = `
+  host().innerHTML = `<div class="lab-root">
   <div class="toolbar"><div class="seg" role="group" aria-label="Aba">${[['campeoes', 'Criativos campeões'], ['imagens', 'Imagens'], ['testes', 'Testes (Estúdio)']].map(([k, l]) => `<button aria-pressed="${tab === k}" data-act="labTab" data-v="${k}">${l} <span class="faint num">${cnt[k]}</span></button>`).join('')}</div></div>
   ${tab === 'campeoes' ? `
-    <div class="toolbar"><button class="btn sm" data-act="labUp" data-v="campeao">${ic('plus')}Subir criativo campeão</button>
-      <span class="faint" style="font-size:12.5px">Criativo pronto (com texto) que já vendeu. Teste que bater a regra entra aqui sozinho.</span></div>
+    <div class="toolbar"><div class="seg small" role="group">${[['todos', 'Todos'], ['atual', 'Atuais'], ['antigo', 'Antigos']].map(([k, l]) => `<button aria-pressed="${chSt === k}" data-act="labCh" data-v="${k}">${l} <span class="faint num">${k === 'todos' ? allCh.length : allCh.filter(x => (k === 'atual') === !!x.live).length}</span></button>`).join('')}</div>
+      <button class="btn sm" data-act="labUp" data-v="campeao">${ic('plus')}Subir criativos campeões</button>
+      <span class="faint" style="font-size:12.5px">Arraste, cole ou escolha vários de uma vez. <b>Atual</b> = rodando agora ou rodou há pouco.</span></div>
     ${champs.length ? `<div class="lab-grid">${champs.map(cardChamp).join('')}</div>` : empty('Nenhum campeão ainda. Suba os criativos que mais venderam (pode ser de contas antigas).')}` : ''}
   ${tab === 'imagens' ? `
     <div class="toolbar"><div class="seg small" role="group">${[['todas', 'Todas'], ['campeoes', 'Dos campeões'], ['banco', 'Banco (novas)']].map(([k, l]) => `<button aria-pressed="${imgSub === k}" data-act="labImgSub" data-v="${k}">${l}</button>`).join('')}</div>
@@ -148,7 +177,7 @@ async function view() {
     <div class="banner note">${ic('info')}<div><p style="margin:0">Ao subir no Face, coloque o <b>código</b> (ex.: <b>LAB-012</b>) no <b>nome do anúncio</b>. O Argos liga gasto e vendas reais sozinho. Regra: depois de ${R.min_days} dias, ROI ≥ ${f2(R.win_roi)} e custo por venda ≤ ${brl(R.win_cpa)} → campeão. Gastou ${brl(R.kill_spend)} sem venda → morreu.</p></div></div>
     <div class="toolbar"><div class="seg small" role="group">${[['todos', 'Todos'], ['pronto', 'Prontos'], ['testando', 'Testando'], ['campeao', 'Campeões'], ['morreu', 'Morreram']].map(([k, l]) => `<button aria-pressed="${tstSt === k}" data-act="labTst" data-v="${k}">${l}</button>`).join('')}</div>
       <button class="btn sm primary" data-act="labNew">${ic('plus')}Novo criativo</button></div>
-    ${tests.length ? `<div class="lab-grid">${tests.map(cardTest).join('')}</div>` : empty('Nenhum criativo de teste. Toque em "Novo criativo" ou em "Criar criativo" numa imagem.')}` : ''}`;
+    ${tests.length ? `<div class="lab-grid">${tests.map(cardTest).join('')}</div>` : empty('Nenhum criativo de teste. Toque em "Novo criativo" ou em "Criar criativo" numa imagem.')}` : ''}</div>`;
 }
 const host = () => $('#view') || $('#mBody'); // PC ou celular
 const empty = t => `<div class="card"><div class="empty">${ic('image')}${esc(t)}</div></div>`;
@@ -157,14 +186,14 @@ const resLine = r => !r ? '<span class="faint" style="font-size:12px">Sem anúnc
   : `<div class="lab-k"><div><small>Gasto</small><b>${brl(r.spend)}</b></div><div><small>Vendas</small><b>${nf(r.sales)}</b></div><div><small>ROI</small><b style="color:${r.roi >= 1.3 ? 'var(--good)' : r.roi >= 1 ? 'var(--warn)' : 'var(--bad)'}">${r.roi == null ? '—' : f2(r.roi)}</b></div><div><small>Custo/venda</small><b>${r.cpa ? brl(r.cpa) : '—'}</b></div><div><small>CTR</small><b>${nf(r.ctr, 1)}%</b></div><div><small>Dias</small><b>${r.days_on}</b></div></div>`;
 const period = it => [it.good_from && it.good_to ? `${A.shortDay(it.good_from)} a ${A.shortDay(it.good_to)}` : it.good_from ? `desde ${A.shortDay(it.good_from)}` : '', it.period_note].filter(Boolean).join(' · ');
 function cardChamp(it, i) {
-  return `<div class="card lab-c"><div class="lab-img" style="background-image:url('${url(it, thumbV(it))}')"><span class="rk">#${i + 1}</span>${has(it, '9x16') && has(it, '1x1') ? '<span class="lab-v">quadrado + stories</span>' : ''}</div>
+  return `<div class="card lab-c"><div class="lab-img" style="background-image:url('${url(it, thumbV(it))}')"><span class="rk">#${i + 1}</span>${it.live ? '<span class="lab-live">ATUAL</span>' : ''}${has(it, '9x16') && has(it, '1x1') ? '<span class="lab-v">quadrado + stories</span>' : ''}</div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.headline || it.code)}</b><span class="faint num">${it.code}</span></div>
       ${it.headline ? `<span class="lab-h">${esc(it.headline)}</span>` : ''}
       ${period(it) ? `<span class="faint" style="font-size:12px">${ic('calendar')}Bom: ${esc(period(it))}</span>` : ''}
       ${it.kind === 'teste' ? resLine(it.result) : ''}
       ${it.tags && it.tags.length ? `<div class="lab-tags">${it.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       ${it.notes ? `<p class="faint" style="font-size:12px;margin:0">${esc(it.notes)}</p>` : ''}
-      <div class="btns">${dlBtns(it)}<button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Editar</button>${it.kind === 'teste' ? `<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('image')}Abrir no Estúdio</button>` : ''}<button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
+      <div class="btns">${dlBtns(it)}<button class="btn sm${it.live ? ' primary' : ''}" data-act="labLive" data-v="${it.id}" aria-pressed="${!!it.live}">${ic('check')}${it.live ? 'Atual' : 'Marcar atual'}</button><button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Editar</button>${it.kind === 'teste' ? `<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('image')}Abrir no Estúdio</button>` : ''}<button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardImg(it) {
   return `<div class="card lab-c"><div class="lab-img tall" style="background-image:url('${url(it, thumbV(it))}')">${it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
@@ -185,41 +214,80 @@ function cardTest(it) {
         <button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 
-/* ───────── subir campeão / imagens ───────── */
-function upload(kind) {
+/* ───────── subir campeão / imagens (vários de uma vez: escolher, arrastar ou colar) ───────── */
+const isImg = f => f && /^image\//.test(f.type);
+function upload(kind, pre = []) {
   const champ = kind === 'campeao';
-  sheet({ title: champ ? 'Subir criativo campeão' : 'Subir imagens', wide: true, ok: 'Subir',
-    body: `<p>${champ ? 'Pode mandar o quadrado e o stories juntos: o Argos separa pelo formato.' : 'Fotos puras, sem texto. Pode escolher várias de uma vez.'}</p>
-      <div class="field"><label for="lF">Arquivo(s)</label><input id="lF" type="file" accept="image/*" ${champ ? '' : 'multiple'} ${champ ? 'multiple' : ''}></div>
-      ${champ ? `<div class="form-row"><div class="field"><label>Nome</label><input name="title" placeholder="Ex.: Carol de óculos"></div><div class="field"><label>Texto do criativo</label><input name="headline" placeholder="Ex.: Carol 26, Solteira!"></div></div>
-        <div class="form-row"><div class="field"><label>Período que foi bom</label><input name="period_note" placeholder="Ex.: ~7 dias, set/2026"></div><div class="field"><label>De (opcional)</label><input type="date" name="good_from"></div><div class="field"><label>Até (opcional)</label><input type="date" name="good_to"></div></div>
-        <div class="form-row"><div class="field"><label>Posição no ranking</label><input name="rank" type="number" min="1" placeholder="1 = o melhor"></div><div class="field"><label>Observações</label><input name="notes" placeholder="Vendeu muito na conta X…"></div></div>`
+  let picked = pre.filter(isImg);
+  sheet({ title: champ ? 'Subir criativos campeões' : 'Subir imagens', wide: true, ok: 'Subir',
+    body: `<div class="lab-drop" id="lDrop" tabindex="0"><input id="lF" type="file" accept="image/*" multiple hidden>
+        ${ic('image')}<b>Arraste as imagens aqui</b><span>ou toque pra escolher da galeria · no PC dá pra colar (Ctrl/Cmd+V)</span></div>
+      <div class="lab-thumbs" id="lTh"></div>
+      ${champ ? `<p class="faint" style="font-size:12.5px;margin:6px 0">Cada imagem vira um campeão. O stories (em pé) de um criativo pode ser juntado depois em <b>Editar</b>.</p>
+        <label class="lab-chk"><input type="checkbox" name="live"> <b>Atuais</b> — estão rodando agora ou rodaram há pouco</label>
+        <div class="form-row"><div class="field"><label>Período que foram bons (opcional)</label><input name="period_note" placeholder="Ex.: set/2026, conta antiga"></div><div class="field"><label>Observações (opcional)</label><input name="notes" placeholder="Vendeu muito na conta X…"></div></div>`
       : `<div class="form-row"><div class="field"><label>Pasta</label><select name="sub"><option value="banco">Banco (novas)</option><option value="campeoes">Imagem de campeão</option></select></div><div class="field"><label>Etiquetas (opcional)</label><input name="tags" placeholder="espelho, corpo inteiro…"></div></div>`}`,
     onOk: async v => {
-      const fs = [...($('#lF').files || [])];
-      if (!fs.length) throw new Error('Escolha pelo menos uma imagem');
-      toast('Enviando…');
-      if (champ) {
-        const files = [];
-        for (const f of fs.slice(0, 2)) { const j = await fileToJpeg(f, 1920); files.push({ variant: j.h / j.w > 1.4 ? '9x16' : '1x1', data: j.data }); }
-        await api('/lab', { body: { kind: 'campeao', ...v, term: termOf(v.headline), files } });
-      } else {
-        for (const f of fs) { const j = await fileToJpeg(f, 1600); await api('/lab', { body: { kind: 'imagem', sub: v.sub, tags: v.tags, title: f.name.replace(/\.[^.]+$/, '').slice(0, 60), files: [{ variant: 'orig', data: j.data }] } }); }
+      if (!picked.length) throw new Error('Escolha, arraste ou cole pelo menos uma imagem');
+      let n = 0;
+      for (const f of picked) {
+        toast(`Enviando ${++n} de ${picked.length}…`);
+        const j = await fileToJpeg(f, champ ? 1920 : 1600);
+        const title = (f.name || '').replace(/\.[^.]+$/, '').replace(/^image$/i, '').slice(0, 60) || null;
+        if (champ) await api('/lab', { body: { kind: 'campeao', live: !!v.live, period_note: v.period_note, notes: v.notes, files: [{ variant: j.h / j.w > 1.4 ? '9x16' : '1x1', data: j.data }] } });
+        else await api('/lab', { body: { kind: 'imagem', sub: v.sub, tags: v.tags, title, files: [{ variant: 'orig', data: j.data }] } });
       }
-      toast(champ ? 'Campeão salvo' : `${fs.length} imagem(ns) salvas`);
+      toast(champ ? `${picked.length} campeão(ões) salvos` : `${picked.length} imagem(ns) salvas`);
       view();
     } });
+  const th = $('#lTh'), drop = $('#lDrop'), inp = $('#lF');
+  const show = () => {
+    th.innerHTML = picked.map((f, i) => `<div><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-rm="${i}" aria-label="Tirar">×</button></div>`).join('');
+    drop.querySelector('b').textContent = picked.length ? `${picked.length} imagem(ns) prontas · pode juntar mais` : 'Arraste as imagens aqui';
+  };
+  const add = fs => { picked = picked.concat([...fs].filter(isImg)); show(); };
+  drop.onclick = () => inp.click();
+  drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } };
+  inp.onchange = () => { add(inp.files); inp.value = ''; };
+  th.onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { picked.splice(+b.dataset.rm, 1); show(); } };
+  ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('on'); }));
+  ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('on'); }));
+  drop.addEventListener('drop', e => add(e.dataTransfer.files));
+  upload.add = add; // o "colar" da página manda pra cá enquanto a folha está aberta
+  show();
 }
+// arrastar/colar direto na tela do Laboratório (sem abrir o botão): abre a folha já com as imagens
+const pasteFiles = e => [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(isImg);
+document.addEventListener('paste', e => {
+  if (!host() || !$('.lab-root', host())) return;
+  const fs = pasteFiles(e); if (!fs.length) return;
+  e.preventDefault();
+  if ($('#lDrop')) upload.add(fs); else if (!$('#sheet .sheet')) upload(tab === 'imagens' ? 'imagem' : 'campeao', fs);
+});
+document.addEventListener('dragover', e => { if ($('.lab-root') && !$('#sheet .sheet') && tab !== 'testes') e.preventDefault(); });
+document.addEventListener('drop', e => {
+  if (!$('.lab-root') || $('#sheet .sheet') || tab === 'testes') return;
+  const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])].filter(isImg); if (!fs.length) return;
+  e.preventDefault(); upload(tab === 'imagens' ? 'imagem' : 'campeao', fs);
+});
 
 function editMeta(id) {
   const it = LAB.items.find(x => x.id === id); if (!it) return;
   sheet({ title: `Editar ${it.code}`, wide: true, ok: 'Salvar',
     body: `<div class="form-row"><div class="field"><label>Nome</label><input name="title" value="${esc(it.title || '')}"></div>${it.kind !== 'imagem' ? `<div class="field"><label>Texto do criativo</label><input name="headline" value="${esc(it.headline || '')}"></div>` : `<div class="field"><label>Pasta</label><select name="sub"><option value="banco" ${it.sub === 'banco' ? 'selected' : ''}>Banco (novas)</option><option value="campeoes" ${it.sub === 'campeoes' ? 'selected' : ''}>Imagem de campeão</option></select></div>`}</div>
       ${it.kind !== 'imagem' ? `<div class="form-row"><div class="field"><label>Período que foi bom</label><input name="period_note" value="${esc(it.period_note || '')}"></div><div class="field"><label>De</label><input type="date" name="good_from" value="${esc(it.good_from || '')}"></div><div class="field"><label>Até</label><input type="date" name="good_to" value="${esc(it.good_to || '')}"></div></div>
-        <div class="form-row"><div class="field"><label>Posição no ranking</label><input name="rank" type="number" min="1" value="${it.rank || ''}"></div></div>` : ''}
+        <div class="form-row"><div class="field"><label>Posição no ranking</label><input name="rank" type="number" min="1" value="${it.rank || ''}"></div></div>
+        <label class="lab-chk"><input type="checkbox" name="live" ${it.live ? 'checked' : ''}> <b>Atual</b> — rodando agora ou rodou há pouco</label>
+        <div class="form-row"><div class="field"><label>${has(it, '1x1') ? 'Trocar o quadrado' : 'Juntar o quadrado'}</label><input type="file" id="eF1" accept="image/*"></div><div class="field"><label>${has(it, '9x16') ? 'Trocar o stories' : 'Juntar o stories (em pé)'}</label><input type="file" id="eF2" accept="image/*"></div></div>` : ''}
       <div class="field"><label>Etiquetas (separadas por vírgula)</label><input name="tags" value="${esc((it.tags || []).join(', '))}"></div>
       <div class="field"><label>Observações</label><input name="notes" value="${esc(it.notes || '')}"></div>`,
-    onOk: async v => { if (v.headline !== undefined) v.term = termOf(v.headline); await api('/lab/' + id, { method: 'PATCH', body: v }); toast('Salvo'); view(); } });
+    onOk: async v => {
+      if (v.headline !== undefined) v.term = termOf(v.headline);
+      const files = [];
+      for (const [el, variant] of [['#eF1', '1x1'], ['#eF2', '9x16']]) { const f = $(el) && $(el).files[0]; if (f) files.push({ variant, data: (await fileToJpeg(f, 1920)).data }); }
+      if (files.length) v.files = files;
+      await api('/lab/' + id, { method: 'PATCH', body: v }); toast('Salvo'); view();
+    } });
 }
 
 /* ───────── Estúdio (editor) ───────── */
@@ -236,8 +304,9 @@ async function studio({ id, sourceId } = {}) {
       <div class="field"><label>Foto</label><div class="st-pick" id="stPick">${pool.filter(x => x.kind === 'imagem').map(x => `<button type="button" data-src="${x.id}" aria-pressed="${x.id === src}" style="background-image:url('${url(x, thumbV(x))}')" title="${esc(x.code)}"></button>`).join('') || '<span class="faint" style="font-size:12px">Sem imagens no banco ainda</span>'}</div>
         <input type="file" id="stFile" accept="image/*"></div>
       <div class="form-row"><div class="field"><label>Linha 1</label><input id="sL1" value="${esc(p.line1)}"></div><div class="field"><label>Linha 2</label><input id="sL2" value="${esc(p.line2)}"></div></div>
+      <div class="field"><label>Frase pequena embaixo (opcional)</label><input id="sL3" value="${esc(p.line3 || '')}" placeholder="Ex.: Te enviou uma foto provocante 📸"></div>
       <div class="field"><label>Termo rápido</label><div class="seg small">${TERMS.map(t => `<button type="button" data-term="${t}">${t}</button>`).join('')}</div></div>
-      <div class="form-row"><div class="field"><label>Faixa</label><input id="sB" value="${esc(p.band)}"></div><div class="field"><label>Cor da faixa</label><select id="sC">${BANDS.map(([c, l]) => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+      <div class="form-row"><div class="field"><label>Faixa</label><input id="sB" value="${esc(p.band)}"></div><div class="field"><label>Jeito do botão</label><select id="sBs">${BSTYLES.map(([k, l]) => `<option value="${k}" ${p.bstyle === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Cor da faixa</label><select id="sC">${BANDS.map(([c, l]) => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Fonte</label><select id="sF">${FONTS.map(([f, l]) => `<option value="${f}" ${p.font === f ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Texto em</label><select id="sP">${[['baixo', 'Baixo'], ['meio', 'Meio'], ['cima', 'Cima']].map(([k, l]) => `<option value="${k}" ${p.pos === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Enquadrar foto (cima ↔ baixo)</label><input id="sY" type="range" min="0" max="1" step="0.02" value="${p.fy}"></div><div class="field"><label>Tamanho do texto</label><input id="sS" type="range" min="70" max="130" step="5" value="${p.size}"></div></div>
       <div class="st-checks">${[['flip', 'Inverter foto'], ['pin', 'Alfinete'], ['wa', 'Ícone verde'], ['arrow', 'Seta'], ['pure', 'Só a foto (sem texto)']].map(([k, l]) => `<label><input type="checkbox" id="k_${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
@@ -250,7 +319,7 @@ async function studio({ id, sourceId } = {}) {
   $('#stClose').onclick = close;
   s.onclick = e => { if (e.target === s) close(); };
   const c1 = $('#c1'), c2 = $('#c2');
-  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value,
+  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value,
     ...Object.fromEntries(['flip', 'pin', 'wa', 'arrow', 'pure'].map(k => [k, $('#k_' + k).checked])) });
   const redraw = () => { read(); draw(c1, img, p, H1); draw(c2, img, p, H2); };
   const setSrc = async id2 => {
@@ -289,6 +358,8 @@ Object.assign(A.ACT, {
   labTab(el) { tab = el.dataset.v; view(); },
   labImgSub(el) { imgSub = el.dataset.v; view(); },
   labTst(el) { tstSt = el.dataset.v; view(); },
+  labCh(el) { chSt = el.dataset.v; view(); },
+  async labLive(el) { const it = LAB.items.find(x => x.id === +el.dataset.v); await api('/lab/' + el.dataset.v, { method: 'PATCH', body: { live: !(it && it.live) } }); toast(it && it.live ? 'Marcado como antigo' : 'Marcado como atual'); view(); },
   labUp(el) { upload(el.dataset.v); },
   labEdit(el) { editMeta(+el.dataset.v); },
   labNew() { return studio({}); },
