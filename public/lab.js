@@ -101,8 +101,8 @@ function draw(cv, img, p, h) {
   }
   if (p.line3) {
     ctx.textAlign = 'center';
-    ctx.font = `600 ${Math.round(40 * k)}px "Montserrat", Arial, sans-serif`;
-    const s3 = fitFont(ctx, p.line3, 'Montserrat', Math.round(40 * k), W * 0.86);
+    ctx.font = `600 ${Math.round(50 * k)}px "Montserrat", Arial, sans-serif`;
+    const s3 = fitFont(ctx, p.line3, 'Montserrat', Math.round(50 * k), W * 0.86);
     ctx.font = `700 ${s3}px "Montserrat", Arial, sans-serif`;
     stroked(ctx, p.line3, W / 2, y - 4 * k, Math.max(4, s3 * 0.14));
     y += s3 * 0.5 + 30 * k;
