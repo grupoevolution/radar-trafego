@@ -18,6 +18,7 @@ const RTAGS = {
   teste: [['foto', 'Foto usada'], ['enquadramento', 'Enquadramento / rosto cortado'], ['texto', 'Texto'], ['botao', 'Botão / faixa'], ['icone', 'Ícone'], ['cores', 'Cores / fonte'], ['montagem', 'Parece montagem'], ['bloqueio', 'Risco de bloqueio']],
   imagem: [['mulher', 'A mulher / rosto'], ['pose', 'Pose'], ['roupa', 'Roupa / nudez'], ['qualidade', 'Qualidade da foto'], ['cenario', 'Cenário'], ['profissional', 'Não parece amadora'], ['bloqueio', 'Risco de bloqueio']]
 };
+const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z"/></svg>';
 const ELIMG = {}; // elementos (PNG) já carregados pro Estúdio: id → Image
 // jeitos de botão que já venderam: pílula (CLICA NO BOTÃO), barra no rodapé (CLIQUE EM SAIBA MAIS!), pílula com ícone do WhatsApp
 const BSTYLES = [['pill', 'Pílula'], ['bar', 'Barra no rodapé'], ['wa', 'Pílula com WhatsApp']];
@@ -190,7 +191,8 @@ async function view() {
   const allCh = it.filter(x => x.kind === 'campeao' || (x.kind === 'teste' && x.status === 'campeao'));
   const champs = allCh.filter(x => chSt === 'todos' || (chSt === 'atual') === !!x.live)
     .sort((a, b) => (!!b.live - !!a.live) || (a.rank || 999) - (b.rank || 999) || ((b.result && b.result.sales) || 0) - ((a.result && a.result.sales) || 0) || new Date(b.created_at) - new Date(a.created_at));
-  const imgs = it.filter(x => x.kind === 'imagem' && (imgSub === 'todas' || x.sub === imgSub));
+  const imgF = { todas: () => true, campeoes: x => x.sub === 'campeoes', banco: x => x.sub === 'banco', ativas: x => x.live, otimas: x => x.star };
+  const imgs = it.filter(x => x.kind === 'imagem' && (imgF[imgSub] || imgF.todas)(x)).sort((a, b) => (!!b.live - !!a.live) || (!!b.star - !!a.star));
   const tests = it.filter(x => x.kind === 'teste' && (tstSt === 'todos' || x.status === tstSt));
   const els = it.filter(x => x.kind === 'elemento');
   const cnt = { campeoes: allCh.length, imagens: it.filter(x => x.kind === 'imagem').length, testes: it.filter(x => x.kind === 'teste').length, elementos: els.length };
@@ -203,7 +205,7 @@ async function view() {
       <span class="faint" style="font-size:12.5px">Arraste, cole ou escolha vários de uma vez. <b>Atual</b> = rodando agora ou rodou há pouco.</span></div>
     ${champs.length ? `<div class="lab-grid">${champs.map(cardChamp).join('')}</div>` : empty('Nenhum campeão ainda. Suba os criativos que mais venderam (pode ser de contas antigas).')}` : ''}
   ${tab === 'imagens' ? `
-    <div class="toolbar"><div class="seg small" role="group">${[['todas', 'Todas'], ['campeoes', 'Dos campeões'], ['banco', 'Banco (novas)']].map(([k, l]) => `<button aria-pressed="${imgSub === k}" data-act="labImgSub" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="toolbar"><div class="seg small" role="group">${[['todas', 'Todas'], ['ativas', 'Ativas'], ['otimas', '★ Ótimas'], ['campeoes', 'Dos campeões'], ['banco', 'Banco (novas)']].map(([k, l]) => `<button aria-pressed="${imgSub === k}" data-act="labImgSub" data-v="${k}">${l}</button>`).join('')}</div>
       <button class="btn sm" data-act="labUp" data-v="imagem">${ic('plus')}Subir imagens</button>
       <span class="pill ${wk.owner_images >= R.weekly_images ? 'p-good' : 'p-warn'}">Esta semana: ${wk.owner_images} de ${R.weekly_images} imagens suas</span></div>
     ${imgs.length ? `<div class="lab-grid img">${imgs.map(cardImg).join('')}</div>` : empty('Nenhuma imagem aqui. Suba fotos puras (sem texto): as dos campeões e as novas que você acha que dão bom.')}` : ''}
@@ -242,11 +244,11 @@ function cardChamp(it, i) {
       <div class="btns">${dlBtns(it)}<button class="btn sm${it.live ? ' primary' : ''}" data-act="labLive" data-v="${it.id}" aria-pressed="${!!it.live}">${ic('check')}${it.live ? 'Atual' : 'Marcar atual'}</button><button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Editar</button>${it.kind === 'teste' ? `<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('image')}Abrir no Estúdio</button>` : ''}<button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardImg(it) {
-  return `<div class="card lab-c"><div class="lab-img tall" data-zoom="${it.id}" style="background-image:url('${url(it, thumbV(it))}')">${badPhoto(it) ? '<span class="lab-v bad">reprovada</span>' : it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
+  return `<div class="card lab-c"><div class="lab-img tall" data-zoom="${it.id}" style="background-image:url('${url(it, thumbV(it))}')">${it.star ? `<span class="lab-star" title="Ótima pra anúncio">${STAR}</span>` : ''}${it.live ? '<span class="lab-live">ATIVA</span>' : ''}${badPhoto(it) ? '<span class="lab-v bad">reprovada</span>' : it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.code)}</b><span class="faint num">${it.code}</span></div>
       <span class="faint" style="font-size:12px">${it.sub === 'campeoes' ? 'Foto de campeão' : 'Banco'} · ${it.added_by === 'claude' ? 'Claude' : 'você'}</span>
       ${it.tags && it.tags.length ? `<div class="lab-tags">${it.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
-      ${rateBox(it)}
+      <div class="lab-flags"><button type="button" class="${it.live ? 'on-live' : ''}" aria-pressed="${!!it.live}" data-act="labLive" data-v="${it.id}">${ic('check')}Ativa</button><button type="button" class="${it.star ? 'on-star' : ''}" aria-pressed="${!!it.star}" data-act="labStar" data-v="${it.id}" aria-label="Ótima pra anúncio">${STAR}${it.star ? 'Ótima' : 'Estrela'}</button></div>
       <div class="btns"><button class="btn sm primary" data-act="labNewFrom" data-v="${it.id}">${ic('plus')}Criar criativo</button>${dlBtns(it)}<button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}</button><button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardTest(it) {
@@ -366,7 +368,7 @@ async function studio({ id, sourceId } = {}) {
   s.innerHTML = `<div class="sheet studio" role="dialog" aria-modal="true"><h3>${ed ? `Editar ${ed.code}` : 'Novo criativo'}</h3>
     <div class="st-wrap"><div class="st-prev"><canvas id="c1"></canvas><canvas id="c2"></canvas></div>
     <div class="st-form">
-      <div class="field"><label>Foto</label><div class="st-pick" id="stPick">${pool.filter(x => x.kind === 'imagem').map(x => `<button type="button" data-src="${x.id}" aria-pressed="${x.id === src}"${badPhoto(x) ? ' class="bad" title="Foto reprovada"' : ''} style="background-image:url('${url(x, thumbV(x))}')" ${badPhoto(x) ? '' : `title="${esc(x.code)}"`}></button>`).join('') || '<span class="faint" style="font-size:12px">Sem imagens no banco ainda</span>'}</div>
+      <div class="field"><label>Foto</label><div class="st-pick" id="stPick">${pool.filter(x => x.kind === 'imagem').sort((a, b) => (!!b.star - !!a.star) || (!!b.live - !!a.live)).map(x => `<button type="button" data-src="${x.id}" aria-pressed="${x.id === src}"${badPhoto(x) ? ' class="bad" title="Foto reprovada"' : ''} style="background-image:url('${url(x, thumbV(x))}')" ${badPhoto(x) ? '' : `title="${esc(x.code)}"`}></button>`).join('') || '<span class="faint" style="font-size:12px">Sem imagens no banco ainda</span>'}</div>
         <input type="file" id="stFile" accept="image/*"></div>
       <div class="form-row"><div class="field"><label>Linha 1</label><input id="sL1" value="${esc(p.line1)}"></div><div class="field"><label>Linha 2</label><input id="sL2" value="${esc(p.line2)}"></div></div>
       <div class="field"><label>Frase pequena embaixo (opcional)</label><input id="sL3" value="${esc(p.line3 || '')}" placeholder="Ex.: Te enviou uma foto provocante 📸"></div>
@@ -450,7 +452,8 @@ Object.assign(A.ACT, {
   labImgSub(el) { imgSub = el.dataset.v; view(); },
   labTst(el) { tstSt = el.dataset.v; view(); },
   labCh(el) { chSt = el.dataset.v; view(); },
-  async labLive(el) { const it = LAB.items.find(x => x.id === +el.dataset.v); await api('/lab/' + el.dataset.v, { method: 'PATCH', body: { live: !(it && it.live) } }); toast(it && it.live ? 'Marcado como antigo' : 'Marcado como atual'); view(); },
+  async labLive(el) { const it = LAB.items.find(x => x.id === +el.dataset.v), img = it && it.kind === 'imagem'; await api('/lab/' + el.dataset.v, { method: 'PATCH', body: { live: !(it && it.live) } }); toast(it && it.live ? (img ? 'Fora das campanhas' : 'Marcado como antigo') : (img ? 'Marcada como ativa' : 'Marcado como atual')); view(); },
+  async labStar(el) { const it = LAB.items.find(x => x.id === +el.dataset.v); await api('/lab/' + el.dataset.v, { method: 'PATCH', body: { star: !(it && it.star) } }); toast(it && it.star ? 'Estrela tirada' : 'Marcada como ótima'); view(); },
   labUp(el) { upload(el.dataset.v); },
   async labRate(el) {
     const id = +el.dataset.v, r = el.dataset.r, it = LAB.items.find(x => x.id === id); if (!it) return;
