@@ -47,7 +47,9 @@ const I = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   chev: '<path d="M6 9l6 6 6-6"/>',
-  flag: '<path d="M5 21V4M5 4h11l-2.5 4L16 12H5"/>'
+  flag: '<path d="M5 21V4M5 4h11l-2.5 4L16 12H5"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  flask: '<path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3M7 15h10"/>'
 };
 const LOGO = '<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#lgA)"/><path d="M8 32 Q32 10 56 32 Q32 54 8 32 Z" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/><circle cx="32" cy="32" r="8.5" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#1D4ED8"/></svg>';
 const GRAD = '<defs><linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--bar-a)"/><stop offset="1" style="stop-color:var(--bar-b)"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--gold);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--gold);stop-opacity:0"/></linearGradient></defs>';
@@ -290,9 +292,10 @@ let view = 'geral';
 let mobTab = 'hoje';
 const VIEWS = {
   geral: ['Visão geral', 'home'], metas: ['Metas', 'flag'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'], contas: ['Contingência', 'tree'],
-  regras: ['Aprovações', 'check'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug'], diag: ['O que mudou', 'pulse'], escala: ['Escala', 'trend']
+  regras: ['Aprovações', 'check'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug'], diag: ['O que mudou', 'pulse'], escala: ['Escala', 'trend'],
+  lab: ['Laboratório de criativos', 'flask']
 };
-const GROUPS = [['Acompanhar', ['geral', 'metas', 'camp', 'cre']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
+const GROUPS = [['Acompanhar', ['geral', 'metas', 'camp', 'cre']], ['Criativos', ['lab']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
 const HASHMAP = { aprovar: ['regras', 'aprovar'], alertas: ['geral', 'alertas'], rel: ['rel', 'rel'] };
 const isMobile = () => window.innerWidth < 760 && store.get('radar-full') !== '1';
 
@@ -1067,7 +1070,7 @@ function connectBmSheet() {
 }
 
 /* ───────────────────────── CELULAR ───────────────────────── */
-const MOB = [['hoje', 'home', 'Hoje'], ['aprovar', 'bolt', 'Aprovar'], ['alertas', 'bell', 'Alertas'], ['rel', 'doc', 'Análise']];
+const MOB = [['hoje', 'home', 'Hoje'], ['aprovar', 'bolt', 'Aprovar'], ['alertas', 'bell', 'Alertas'], ['rel', 'doc', 'Análise'], ['lab', 'flask', 'Criativos']];
 async function renderMobile() {
   lastMobile = true;
   $('#root').innerHTML = `<div class="mob"><div class="mob-top"><div class="mt">${LOGO}<b id="mTitle"></b></div><div style="display:flex;gap:6px;align-items:center"><span class="sync" style="font-size:11.5px" id="syncLine"></span><button class="chip" data-act="sync" aria-label="Atualizar agora">${ic('refresh')}</button><button class="chip" data-act="full" aria-label="Versão completa">${ic('monitor')}</button></div></div>
@@ -1084,7 +1087,8 @@ async function mob(t) {
   $('#mTitle').textContent = MOB.find(m => m[0] === t)[2];
   const B = $('#mBody');
   try {
-    if (t === 'hoje') {
+    if (t === 'lab') { await RENDER.lab(); }
+    else if (t === 'hoje') {
       const o = await api('/overview');
       const c = o.cur, p = o.prev, bud = o.budget_goal || o.targets.daily_budget_goal, C = 2 * Math.PI * 50, fill = Math.min(1, div(c.roi, o.targets.roi_goal * 1.25));
       const subscribed = 'Notification' in window && Notification.permission === 'granted';
@@ -1340,5 +1344,7 @@ setInterval(() => {
   else if (!isMobile() && view === 'geral' && ov.k === 'today' && !dpOpen) viewGeral().catch(() => {});
 }, 120000);
 
+// o Laboratório (public/lab.js) usa estas peças
+window.ARGOS = { $, $$, ic, esc, nf, brl, f2, api, toast, sheet, sub, topRight, shortDay, ACT, RENDER };
 boot();
 })();

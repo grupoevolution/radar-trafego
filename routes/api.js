@@ -14,6 +14,7 @@ const { encrypt, safeEqual } = require('../lib/crypto');
 const { COOKIE, sign, requireAdmin, requireClaude } = require('../lib/auth');
 const reports = require('../lib/reports');
 const creatives = require('../lib/creatives');
+const lab = require('../lib/lab');
 const r2 = v => Math.round((v || 0) * 100) / 100;
 
 const router = express.Router();
@@ -53,6 +54,22 @@ router.post('/reports', requireClaude, wrap(async (req, res) => {
   res.json(await reports.create(req.body));
 }));
 router.get('/claude/guide', requireClaude, (req, res) => res.type('text/plain').send(reports.GUIDE));
+
+// ── LABORATÓRIO DE CRIATIVOS (painel ou Claude com a chave dele) ──────────
+router.get('/lab', requireClaude, wrap(async (req, res) => res.json(await lab.list())));
+router.post('/lab', requireClaude, wrap(async (req, res) => {
+  const byClaude = String(req.headers.authorization || '').startsWith('Bearer ');
+  res.json(await lab.create(req.body || {}, byClaude ? 'claude' : 'dono'));
+}));
+router.patch('/lab/:id', requireClaude, wrap(async (req, res) => res.json(await lab.update(Number(req.params.id), req.body || {}))));
+router.delete('/lab/:id', requireClaude, wrap(async (req, res) => { await lab.remove(Number(req.params.id)); res.json({ ok: true }); }));
+router.get('/lab/file/:id/:variant', requireClaude, wrap(async (req, res) => {
+  const f = await lab.file(Number(req.params.id), req.params.variant);
+  if (!f) return res.status(404).json({ error: 'Arquivo não encontrado' });
+  res.set('Cache-Control', 'private, max-age=86400');
+  if (req.query.dl) res.attachment(lab.fileName(f, req.params.variant));
+  res.type(f.mime).send(f.bytes);
+}));
 
 router.use(requireAdmin);
 

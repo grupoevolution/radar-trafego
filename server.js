@@ -21,7 +21,7 @@ async function boot() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '20mb' })); // Laboratório sobe imagens em base64
   app.use(cookieParser());
 
   app.get('/health', async (req, res) => {
