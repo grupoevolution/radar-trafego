@@ -11,7 +11,14 @@ const BANDS = [['#25D366', 'Verde'], ['#FFC21A', 'Amarelo'], ['#E8212E', 'Vermel
 const FONTS = [['Archivo Black', 'Grossa (padrão)'], ['Anton', 'Alta e fina'], ['Montserrat', 'Redonda']];
 const TERMS = ['Casada', 'Solteira', 'Divorciada', 'Viúva'];
 const ST = { pronto: ['info', 'Pronto pra subir'], testando: ['warn', 'Testando'], campeao: ['good', 'Campeão'], morreu: ['bad', 'Morreu'] };
-const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100 };
+const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100, waEl: 0, pinEl: 0, isz: 100 };
+// avaliação do dono: o que ficou ruim (o Claude lê pra não repetir)
+const RATE = { bom: ['good', 'Bom'], ok: ['warn', 'Pode melhorar'], ruim: ['bad', 'Ruim'] };
+const RTAGS = {
+  teste: [['foto', 'Foto usada'], ['enquadramento', 'Enquadramento / rosto cortado'], ['texto', 'Texto'], ['botao', 'Botão / faixa'], ['icone', 'Ícone'], ['cores', 'Cores / fonte'], ['montagem', 'Parece montagem'], ['bloqueio', 'Risco de bloqueio']],
+  imagem: [['mulher', 'A mulher / rosto'], ['pose', 'Pose'], ['roupa', 'Roupa / nudez'], ['qualidade', 'Qualidade da foto'], ['cenario', 'Cenário'], ['profissional', 'Não parece amadora'], ['bloqueio', 'Risco de bloqueio']]
+};
+const ELIMG = {}; // elementos (PNG) já carregados pro Estúdio: id → Image
 // jeitos de botão que já venderam: pílula (CLICA NO BOTÃO), barra no rodapé (CLIQUE EM SAIBA MAIS!), pílula com ícone do WhatsApp
 const BSTYLES = [['pill', 'Pílula'], ['bar', 'Barra no rodapé'], ['wa', 'Pílula com WhatsApp']];
 
@@ -32,6 +39,23 @@ async function fileToJpeg(file, max = 1600) {
     c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
     return { data: c.toDataURL('image/jpeg', 0.9), w: c.width, h: c.height };
   } finally { URL.revokeObjectURL(src); }
+}
+// elemento (ícone/selo): mantém o fundo transparente
+async function fileToPng(file, max = 800) {
+  const src = URL.createObjectURL(file);
+  try {
+    const im = await loadImg(src);
+    const r = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * r); c.height = Math.round(im.naturalHeight * r);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    return { data: c.toDataURL('image/png'), w: c.width, h: c.height };
+  } finally { URL.revokeObjectURL(src); }
+}
+// cola um elemento centrado em (cx, cy) com a altura pedida, mantendo a proporção
+function stamp(ctx, im, cx, cy, hh) {
+  const ww = hh * im.naturalWidth / im.naturalHeight;
+  ctx.drawImage(im, cx - ww / 2, cy - hh / 2, ww, hh);
+  return ww;
 }
 
 /* ───────── desenho do criativo (mesmo modelo das campeãs) ───────── */
@@ -88,9 +112,11 @@ function draw(cv, img, p, h) {
   let y = ty;
   if (p.line1) {
     const s1 = fitFont(ctx, p.line1, p.font, Math.round(92 * k), W * (p.pin ? 0.8 : 0.9));
-    const tw = ctx.measureText(p.line1).width, x0 = (W - tw - (p.pin ? 70 : 0)) / 2;
-    if (p.pin) pin(ctx, x0 + 26, y - 20, 24 * k);
-    ctx.textAlign = 'left'; stroked(ctx, p.line1, x0 + (p.pin ? 70 : 0), y, Math.max(6, s1 * 0.13));
+    const pe = p.pin && ELIMG[p.pinEl], ph = s1 * 1.1, pw = pe ? ph * pe.naturalWidth / pe.naturalHeight + 14 : 70;
+    const tw = ctx.measureText(p.line1).width, x0 = (W - tw - (p.pin ? pw : 0)) / 2;
+    if (pe) stamp(ctx, pe, x0 + (pw - 14) / 2, y - 4, ph);
+    else if (p.pin) pin(ctx, x0 + 26, y - 20, 24 * k);
+    ctx.textAlign = 'left'; stroked(ctx, p.line1, x0 + (p.pin ? pw : 0), y, Math.max(6, s1 * 0.13));
     y += s1 * 0.5 + 44 * k;
   }
   if (p.line2) {
@@ -121,8 +147,11 @@ function draw(cv, img, p, h) {
     ctx.fillStyle = p.color === '#111111' ? '#111' : GREEN; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.stroke();
     const r = bh * 0.36, cx = bx + bh / 2 + 4, cy = y + bh / 2;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, r / 5); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.lineWidth = Math.max(5, r / 3.2); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 0.55, Math.PI * 1.2); ctx.stroke(); ctx.lineCap = 'butt';
+    if (ELIMG[p.waEl]) stamp(ctx, ELIMG[p.waEl], cx, cy, r * 2.3);
+    else {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, r / 5); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = Math.max(5, r / 3.2); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 0.55, Math.PI * 1.2); ctx.stroke(); ctx.lineCap = 'butt';
+    }
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(p.band, bx + bh + 20, cy);
   } else if (p.band) {
     const fb = fitFont(ctx, p.band, p.font, Math.round(46 * k), W * 0.7);
@@ -137,7 +166,11 @@ function draw(cv, img, p, h) {
       ctx.fillRect(ax - 7, ay - 22, 14, 18); ctx.beginPath(); ctx.moveTo(ax - 18, ay - 6); ctx.lineTo(ax + 18, ay - 6); ctx.lineTo(ax, ay + 20); ctx.closePath(); ctx.fill();
     }
   }
-  if (p.wa) waIcon(ctx, p.pos === 'cima' ? W * 0.16 : W * 0.84, p.pos === 'cima' ? h * (sq ? 0.86 : 0.76) : h * (sq ? 0.13 : 0.17), 78 * k);
+  if (p.wa) {
+    const cx = p.pos === 'cima' ? W * 0.16 : W * 0.84, cy = p.pos === 'cima' ? h * (sq ? 0.86 : 0.76) : h * (sq ? 0.13 : 0.17), z = (p.isz || 100) / 100;
+    if (ELIMG[p.waEl]) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5; stamp(ctx, ELIMG[p.waEl], cx, cy, 175 * z); ctx.restore(); }
+    else waIcon(ctx, cx, cy, 78 * z);
+  }
 }
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 let fontsReady = null;
@@ -159,10 +192,11 @@ async function view() {
     .sort((a, b) => (!!b.live - !!a.live) || (a.rank || 999) - (b.rank || 999) || ((b.result && b.result.sales) || 0) - ((a.result && a.result.sales) || 0) || new Date(b.created_at) - new Date(a.created_at));
   const imgs = it.filter(x => x.kind === 'imagem' && (imgSub === 'todas' || x.sub === imgSub));
   const tests = it.filter(x => x.kind === 'teste' && (tstSt === 'todos' || x.status === tstSt));
-  const cnt = { campeoes: allCh.length, imagens: it.filter(x => x.kind === 'imagem').length, testes: it.filter(x => x.kind === 'teste').length };
+  const els = it.filter(x => x.kind === 'elemento');
+  const cnt = { campeoes: allCh.length, imagens: it.filter(x => x.kind === 'imagem').length, testes: it.filter(x => x.kind === 'teste').length, elementos: els.length };
   const R = LAB.rules, wk = LAB.week;
   host().innerHTML = `<div class="lab-root">
-  <div class="toolbar"><div class="seg" role="group" aria-label="Aba">${[['campeoes', 'Criativos campeões'], ['imagens', 'Imagens'], ['testes', 'Testes (Estúdio)']].map(([k, l]) => `<button aria-pressed="${tab === k}" data-act="labTab" data-v="${k}">${l} <span class="faint num">${cnt[k]}</span></button>`).join('')}</div></div>
+  <div class="toolbar"><div class="seg" role="group" aria-label="Aba">${[['campeoes', 'Criativos campeões'], ['imagens', 'Imagens'], ['testes', 'Testes (Estúdio)'], ['elementos', 'Elementos']].map(([k, l]) => `<button aria-pressed="${tab === k}" data-act="labTab" data-v="${k}">${l} <span class="faint num">${cnt[k]}</span></button>`).join('')}</div></div>
   ${tab === 'campeoes' ? `
     <div class="toolbar"><div class="seg small" role="group">${[['todos', 'Todos'], ['atual', 'Atuais'], ['antigo', 'Antigos']].map(([k, l]) => `<button aria-pressed="${chSt === k}" data-act="labCh" data-v="${k}">${l} <span class="faint num">${k === 'todos' ? allCh.length : allCh.filter(x => (k === 'atual') === !!x.live).length}</span></button>`).join('')}</div>
       <button class="btn sm" data-act="labUp" data-v="campeao">${ic('plus')}Subir criativos campeões</button>
@@ -177,13 +211,25 @@ async function view() {
     <div class="banner note">${ic('info')}<div><p style="margin:0">Ao subir no Face, coloque o <b>código</b> (ex.: <b>LAB-012</b>) no <b>nome do anúncio</b>. O Argos liga gasto e vendas reais sozinho. Regra: depois de ${R.min_days} dias, ROI ≥ ${f2(R.win_roi)} e custo por venda ≤ ${brl(R.win_cpa)} → campeão. Gastou ${brl(R.kill_spend)} sem venda → morreu.</p></div></div>
     <div class="toolbar"><div class="seg small" role="group">${[['todos', 'Todos'], ['pronto', 'Prontos'], ['testando', 'Testando'], ['campeao', 'Campeões'], ['morreu', 'Morreram']].map(([k, l]) => `<button aria-pressed="${tstSt === k}" data-act="labTst" data-v="${k}">${l}</button>`).join('')}</div>
       <button class="btn sm primary" data-act="labNew">${ic('plus')}Novo criativo</button></div>
-    ${tests.length ? `<div class="lab-grid">${tests.map(cardTest).join('')}</div>` : empty('Nenhum criativo de teste. Toque em "Novo criativo" ou em "Criar criativo" numa imagem.')}` : ''}</div>`;
+    ${tests.length ? `<div class="lab-grid">${tests.map(cardTest).join('')}</div>` : empty('Nenhum criativo de teste. Toque em "Novo criativo" ou em "Criar criativo" numa imagem.')}` : ''}
+  ${tab === 'elementos' ? `
+    <div class="toolbar"><button class="btn sm" data-act="labUp" data-v="elemento">${ic('plus')}Subir elementos</button>
+      <span class="faint" style="font-size:12.5px">Ícones e selos em <b>PNG com fundo transparente</b> (ex.: ícone oficial do WhatsApp, alfinete). O Estúdio cola por cima da foto. Dê um nome claro: "WhatsApp", "Alfinete".</span></div>
+    ${els.length ? `<div class="lab-grid img">${els.map(cardEl).join('')}</div>` : empty('Nenhum elemento ainda. Suba o ícone do WhatsApp (PNG transparente) pra o Estúdio usar no lugar do desenhado.')}` : ''}</div>`;
 }
 const host = () => $('#view') || $('#mBody'); // PC ou celular
 const empty = t => `<div class="card"><div class="empty">${ic('image')}${esc(t)}</div></div>`;
 const dlBtns = it => ['1x1', '9x16', 'orig'].filter(v => has(it, v)).map(v => `<a class="btn sm" href="${url(it, v)}&dl=1" download>${ic('download')}${v === '1x1' ? 'Quadrado' : v === '9x16' ? 'Stories' : 'Baixar'}</a>`).join('');
 const resLine = r => !r ? '<span class="faint" style="font-size:12px">Sem anúncio com esse código no Face ainda</span>'
   : `<div class="lab-k"><div><small>Gasto</small><b>${brl(r.spend)}</b></div><div><small>Vendas</small><b>${nf(r.sales)}</b></div><div><small>ROI</small><b style="color:${r.roi >= 1.3 ? 'var(--good)' : r.roi >= 1 ? 'var(--warn)' : 'var(--bad)'}">${r.roi == null ? '—' : f2(r.roi)}</b></div><div><small>Custo/venda</small><b>${r.cpa ? brl(r.cpa) : '—'}</b></div><div><small>CTR</small><b>${nf(r.ctr, 1)}%</b></div><div><small>Dias</small><b>${r.days_on}</b></div></div>`;
+// selo da avaliação + botões Bom / Pode melhorar / Ruim
+const rateBox = it => {
+  const r = RATE[it.rating], tags = RTAGS[it.kind === 'imagem' ? 'imagem' : 'teste'];
+  return `<div class="lab-rate">${Object.entries(RATE).map(([k, v]) => `<button type="button" class="r-${v[0]}" aria-pressed="${it.rating === k}" data-act="labRate" data-v="${it.id}" data-r="${k}">${v[1]}</button>`).join('')}</div>
+    ${r && it.rating !== 'bom' && ((it.rating_tags || []).length || it.rating_note) ? `<p class="lab-why">${(it.rating_tags || []).map(t => esc((tags.find(x => x[0] === t) || [t, t])[1])).join(' · ')}${it.rating_note ? `${(it.rating_tags || []).length ? ' — ' : ''}${esc(it.rating_note)}` : ''}</p>` : ''}`;
+};
+// foto do banco que já foi reprovada (nela mesma ou como "foto usada" num teste)
+const badPhoto = it => it.rating === 'ruim' || LAB.items.some(t => t.kind === 'teste' && t.source_id === it.id && t.rating && t.rating !== 'bom' && (t.rating_tags || []).includes('foto'));
 const period = it => [it.good_from && it.good_to ? `${A.shortDay(it.good_from)} a ${A.shortDay(it.good_to)}` : it.good_from ? `desde ${A.shortDay(it.good_from)}` : '', it.period_note].filter(Boolean).join(' · ');
 function cardChamp(it, i) {
   return `<div class="card lab-c"><div class="lab-img" style="background-image:url('${url(it, thumbV(it))}')"><span class="rk">#${i + 1}</span>${it.live ? '<span class="lab-live">ATUAL</span>' : ''}${has(it, '9x16') && has(it, '1x1') ? '<span class="lab-v">quadrado + stories</span>' : ''}</div>
@@ -196,10 +242,11 @@ function cardChamp(it, i) {
       <div class="btns">${dlBtns(it)}<button class="btn sm${it.live ? ' primary' : ''}" data-act="labLive" data-v="${it.id}" aria-pressed="${!!it.live}">${ic('check')}${it.live ? 'Atual' : 'Marcar atual'}</button><button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Editar</button>${it.kind === 'teste' ? `<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('image')}Abrir no Estúdio</button>` : ''}<button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardImg(it) {
-  return `<div class="card lab-c"><div class="lab-img tall" style="background-image:url('${url(it, thumbV(it))}')">${it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
+  return `<div class="card lab-c"><div class="lab-img tall" style="background-image:url('${url(it, thumbV(it))}')">${badPhoto(it) ? '<span class="lab-v bad">reprovada</span>' : it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.code)}</b><span class="faint num">${it.code}</span></div>
       <span class="faint" style="font-size:12px">${it.sub === 'campeoes' ? 'Foto de campeão' : 'Banco'} · ${it.added_by === 'claude' ? 'Claude' : 'você'}</span>
       ${it.tags && it.tags.length ? `<div class="lab-tags">${it.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
+      ${rateBox(it)}
       <div class="btns"><button class="btn sm primary" data-act="labNewFrom" data-v="${it.id}">${ic('plus')}Criar criativo</button>${dlBtns(it)}<button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}</button><button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardTest(it) {
@@ -209,35 +256,44 @@ function cardTest(it) {
       ${it.headline ? `<span class="lab-h">${esc(it.headline)}</span>` : ''}
       ${it.notes ? `<p class="faint" style="font-size:12px;margin:0">${esc(it.notes)}</p>` : ''}
       ${resLine(it.result)}
+      ${rateBox(it)}
       <div class="btns">${dlBtns(it)}<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('edit')}Editar</button>
         <select class="btn sm" data-labst="${it.id}" aria-label="Situação">${Object.entries(ST).map(([k, v]) => `<option value="${k}" ${it.status === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select>
         <button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 
+function cardEl(it) {
+  return `<div class="card lab-c"><div class="lab-img el"><img src="${url(it, 'orig')}" alt="${esc(it.title || it.code)}"></div>
+    <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.code)}</b><span class="faint num">${it.code}</span></div>
+      <div class="btns">${dlBtns(it)}<button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Renomear</button><button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
+}
+
 /* ───────── subir campeão / imagens (vários de uma vez: escolher, arrastar ou colar) ───────── */
 const isImg = f => f && /^image\//.test(f.type);
 function upload(kind, pre = []) {
-  const champ = kind === 'campeao';
+  const champ = kind === 'campeao', el = kind === 'elemento';
   let picked = pre.filter(isImg);
-  sheet({ title: champ ? 'Subir criativos campeões' : 'Subir imagens', wide: true, ok: 'Subir',
+  sheet({ title: champ ? 'Subir criativos campeões' : el ? 'Subir elementos (ícones)' : 'Subir imagens', wide: true, ok: 'Subir',
     body: `<div class="lab-drop" id="lDrop" tabindex="0"><input id="lF" type="file" accept="image/*" multiple hidden>
         ${ic('image')}<b>Arraste as imagens aqui</b><span>ou toque pra escolher da galeria · no PC dá pra colar (Ctrl/Cmd+V)</span></div>
       <div class="lab-thumbs" id="lTh"></div>
       ${champ ? `<p class="faint" style="font-size:12.5px;margin:6px 0">Cada imagem vira um campeão. O stories (em pé) de um criativo pode ser juntado depois em <b>Editar</b>.</p>
         <label class="lab-chk"><input type="checkbox" name="live"> <b>Atuais</b> — estão rodando agora ou rodaram há pouco</label>
         <div class="form-row"><div class="field"><label>Período que foram bons (opcional)</label><input name="period_note" placeholder="Ex.: set/2026, conta antiga"></div><div class="field"><label>Observações (opcional)</label><input name="notes" placeholder="Vendeu muito na conta X…"></div></div>`
+      : el ? `<p class="faint" style="font-size:12.5px;margin:6px 0">Use PNG com fundo transparente. O nome do arquivo vira o nome do elemento (dá pra renomear depois). Nome com "whats" vira o ícone padrão do Estúdio.</p>`
       : `<div class="form-row"><div class="field"><label>Pasta</label><select name="sub"><option value="banco">Banco (novas)</option><option value="campeoes">Imagem de campeão</option></select></div><div class="field"><label>Etiquetas (opcional)</label><input name="tags" placeholder="espelho, corpo inteiro…"></div></div>`}`,
     onOk: async v => {
       if (!picked.length) throw new Error('Escolha, arraste ou cole pelo menos uma imagem');
       let n = 0;
       for (const f of picked) {
         toast(`Enviando ${++n} de ${picked.length}…`);
-        const j = await fileToJpeg(f, champ ? 1920 : 1600);
+        const j = el ? await fileToPng(f) : await fileToJpeg(f, champ ? 1920 : 1600);
         const title = (f.name || '').replace(/\.[^.]+$/, '').replace(/^image$/i, '').slice(0, 60) || null;
-        if (champ) await api('/lab', { body: { kind: 'campeao', live: !!v.live, period_note: v.period_note, notes: v.notes, files: [{ variant: j.h / j.w > 1.4 ? '9x16' : '1x1', data: j.data }] } });
+        if (el) await api('/lab', { body: { kind: 'elemento', title, files: [{ variant: 'orig', data: j.data }] } });
+        else if (champ) await api('/lab', { body: { kind: 'campeao', live: !!v.live, period_note: v.period_note, notes: v.notes, files: [{ variant: j.h / j.w > 1.4 ? '9x16' : '1x1', data: j.data }] } });
         else await api('/lab', { body: { kind: 'imagem', sub: v.sub, tags: v.tags, title, files: [{ variant: 'orig', data: j.data }] } });
       }
-      toast(champ ? `${picked.length} campeão(ões) salvos` : `${picked.length} imagem(ns) salvas`);
+      toast(champ ? `${picked.length} campeão(ões) salvos` : el ? `${picked.length} elemento(s) salvos` : `${picked.length} imagem(ns) salvas`);
       view();
     } });
   const th = $('#lTh'), drop = $('#lDrop'), inp = $('#lF');
@@ -257,22 +313,25 @@ function upload(kind, pre = []) {
   show();
 }
 // arrastar/colar direto na tela do Laboratório (sem abrir o botão): abre a folha já com as imagens
+const upKind = () => tab === 'imagens' ? 'imagem' : tab === 'elementos' ? 'elemento' : 'campeao';
 const pasteFiles = e => [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(isImg);
 document.addEventListener('paste', e => {
   if (!host() || !$('.lab-root', host())) return;
   const fs = pasteFiles(e); if (!fs.length) return;
   e.preventDefault();
-  if ($('#lDrop')) upload.add(fs); else if (!$('#sheet .sheet')) upload(tab === 'imagens' ? 'imagem' : 'campeao', fs);
+  if ($('#lDrop')) upload.add(fs); else if (!$('#sheet .sheet')) upload(upKind(), fs);
 });
 document.addEventListener('dragover', e => { if ($('.lab-root') && !$('#sheet .sheet') && tab !== 'testes') e.preventDefault(); });
 document.addEventListener('drop', e => {
   if (!$('.lab-root') || $('#sheet .sheet') || tab === 'testes') return;
   const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])].filter(isImg); if (!fs.length) return;
-  e.preventDefault(); upload(tab === 'imagens' ? 'imagem' : 'campeao', fs);
+  e.preventDefault(); upload(upKind(), fs);
 });
 
 function editMeta(id) {
   const it = LAB.items.find(x => x.id === id); if (!it) return;
+  if (it.kind === 'elemento') return sheet({ title: `Renomear ${it.code}`, ok: 'Salvar', body: `<div class="field"><label>Nome</label><input name="title" value="${esc(it.title || '')}" placeholder="Ex.: WhatsApp"></div>`,
+    onOk: async v => { await api('/lab/' + id, { method: 'PATCH', body: v }); toast('Salvo'); view(); } });
   sheet({ title: `Editar ${it.code}`, wide: true, ok: 'Salvar',
     body: `<div class="form-row"><div class="field"><label>Nome</label><input name="title" value="${esc(it.title || '')}"></div>${it.kind !== 'imagem' ? `<div class="field"><label>Texto do criativo</label><input name="headline" value="${esc(it.headline || '')}"></div>` : `<div class="field"><label>Pasta</label><select name="sub"><option value="banco" ${it.sub === 'banco' ? 'selected' : ''}>Banco (novas)</option><option value="campeoes" ${it.sub === 'campeoes' ? 'selected' : ''}>Imagem de campeão</option></select></div>`}</div>
       ${it.kind !== 'imagem' ? `<div class="form-row"><div class="field"><label>Período que foi bom</label><input name="period_note" value="${esc(it.period_note || '')}"></div><div class="field"><label>De</label><input type="date" name="good_from" value="${esc(it.good_from || '')}"></div><div class="field"><label>Até</label><input type="date" name="good_to" value="${esc(it.good_to || '')}"></div></div>
@@ -295,13 +354,19 @@ async function studio({ id, sourceId } = {}) {
   await loadFonts();
   const ed = id ? LAB.items.find(x => x.id === id) : null;
   const p = { ...DEF, ...((ed && ed.params) || {}) };
+  const els = LAB.items.filter(x => x.kind === 'elemento');
+  await Promise.all(els.filter(x => !ELIMG[x.id]).map(x => loadImg(url(x, 'orig')).then(im => { ELIMG[x.id] = im; }).catch(() => null)));
+  const byName = re => (els.find(x => re.test(x.title || '')) || {}).id || 0;
+  // criativo novo já nasce com o ícone enviado (nome com "whats") e o alfinete enviado (nome com "alfinete"/"pin")
+  if (!(ed && ed.params && 'waEl' in ed.params)) { p.waEl = byName(/whats/i); p.pinEl = byName(/alfinete|pin|local/i); }
+  const elOpts = cur => `<option value="0" ${!cur ? 'selected' : ''}>Desenhado (antigo)</option>${els.map(x => `<option value="${x.id}" ${+cur === x.id ? 'selected' : ''}>${esc(x.title || x.code)}</option>`).join('')}`;
   let src = sourceId || (ed && ed.source_id) || null, img = null, ownFile = null;
   const pool = LAB.items.filter(x => x.kind === 'imagem' || (x.kind === 'campeao' && !has(x, 'orig')));
   const s = $('#sheet');
   s.innerHTML = `<div class="sheet studio" role="dialog" aria-modal="true"><h3>${ed ? `Editar ${ed.code}` : 'Novo criativo'}</h3>
     <div class="st-wrap"><div class="st-prev"><canvas id="c1"></canvas><canvas id="c2"></canvas></div>
     <div class="st-form">
-      <div class="field"><label>Foto</label><div class="st-pick" id="stPick">${pool.filter(x => x.kind === 'imagem').map(x => `<button type="button" data-src="${x.id}" aria-pressed="${x.id === src}" style="background-image:url('${url(x, thumbV(x))}')" title="${esc(x.code)}"></button>`).join('') || '<span class="faint" style="font-size:12px">Sem imagens no banco ainda</span>'}</div>
+      <div class="field"><label>Foto</label><div class="st-pick" id="stPick">${pool.filter(x => x.kind === 'imagem').map(x => `<button type="button" data-src="${x.id}" aria-pressed="${x.id === src}"${badPhoto(x) ? ' class="bad" title="Foto reprovada"' : ''} style="background-image:url('${url(x, thumbV(x))}')" ${badPhoto(x) ? '' : `title="${esc(x.code)}"`}></button>`).join('') || '<span class="faint" style="font-size:12px">Sem imagens no banco ainda</span>'}</div>
         <input type="file" id="stFile" accept="image/*"></div>
       <div class="form-row"><div class="field"><label>Linha 1</label><input id="sL1" value="${esc(p.line1)}"></div><div class="field"><label>Linha 2</label><input id="sL2" value="${esc(p.line2)}"></div></div>
       <div class="field"><label>Frase pequena embaixo (opcional)</label><input id="sL3" value="${esc(p.line3 || '')}" placeholder="Ex.: Te enviou uma foto provocante 📸"></div>
@@ -309,6 +374,8 @@ async function studio({ id, sourceId } = {}) {
       <div class="form-row"><div class="field"><label>Faixa</label><input id="sB" value="${esc(p.band)}"></div><div class="field"><label>Jeito do botão</label><select id="sBs">${BSTYLES.map(([k, l]) => `<option value="${k}" ${p.bstyle === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Cor da faixa</label><select id="sC">${BANDS.map(([c, l]) => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Fonte</label><select id="sF">${FONTS.map(([f, l]) => `<option value="${f}" ${p.font === f ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Texto em</label><select id="sP">${[['baixo', 'Baixo'], ['meio', 'Meio'], ['cima', 'Cima']].map(([k, l]) => `<option value="${k}" ${p.pos === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Enquadrar foto (cima ↔ baixo)</label><input id="sY" type="range" min="0" max="1" step="0.02" value="${p.fy}"></div><div class="field"><label>Tamanho do texto</label><input id="sS" type="range" min="70" max="130" step="5" value="${p.size}"></div></div>
+      <div class="form-row"><div class="field"><label>Ícone do canto / da pílula</label><select id="sWe">${elOpts(p.waEl)}</select></div><div class="field"><label>Alfinete</label><select id="sPe">${elOpts(p.pinEl)}</select></div><div class="field"><label>Tamanho do ícone</label><input id="sIz" type="range" min="50" max="160" step="5" value="${p.isz}"></div></div>
+      ${els.length ? '' : '<p class="faint" style="font-size:12px;margin:0">Suba o ícone do WhatsApp em <b>Elementos</b> pra usar o oficial no lugar do desenhado.</p>'}
       <div class="st-checks">${[['flip', 'Inverter foto'], ['pin', 'Alfinete'], ['wa', 'Ícone verde'], ['arrow', 'Seta'], ['pure', 'Só a foto (sem texto)']].map(([k, l]) => `<label><input type="checkbox" id="k_${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
       <div class="field"><label>Observação do teste</label><input id="sN" value="${esc((ed && ed.notes) || '')}" placeholder="Ex.: mesma foto da LAB-003 com Viúva"></div>
     </div></div>
@@ -319,7 +386,7 @@ async function studio({ id, sourceId } = {}) {
   $('#stClose').onclick = close;
   s.onclick = e => { if (e.target === s) close(); };
   const c1 = $('#c1'), c2 = $('#c2');
-  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value,
+  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value, waEl: +$('#sWe').value, pinEl: +$('#sPe').value, isz: +$('#sIz').value,
     ...Object.fromEntries(['flip', 'pin', 'wa', 'arrow', 'pure'].map(k => [k, $('#k_' + k).checked])) });
   const redraw = () => { read(); draw(c1, img, p, H1); draw(c2, img, p, H2); };
   const setSrc = async id2 => {
@@ -361,13 +428,27 @@ Object.assign(A.ACT, {
   labCh(el) { chSt = el.dataset.v; view(); },
   async labLive(el) { const it = LAB.items.find(x => x.id === +el.dataset.v); await api('/lab/' + el.dataset.v, { method: 'PATCH', body: { live: !(it && it.live) } }); toast(it && it.live ? 'Marcado como antigo' : 'Marcado como atual'); view(); },
   labUp(el) { upload(el.dataset.v); },
+  async labRate(el) {
+    const id = +el.dataset.v, r = el.dataset.r, it = LAB.items.find(x => x.id === id); if (!it) return;
+    if (r === 'bom') { await api('/lab/' + id, { method: 'PATCH', body: { rating: it.rating === 'bom' ? null : 'bom', rating_tags: [], rating_note: null } }); toast(it.rating === 'bom' ? 'Avaliação tirada' : 'Marcado como bom'); return view(); }
+    const tags = RTAGS[it.kind === 'imagem' ? 'imagem' : 'teste'], cur = it.rating === r ? it.rating_tags || [] : [];
+    sheet({ title: `${RATE[r][1]} — ${it.code}`, ok: 'Salvar',
+      body: `<p>O que ficou ${r === 'ruim' ? 'ruim' : 'fraco'}? Marque o que quiser — o Claude lê isso pra não repetir.</p>
+        <div class="lab-rt">${tags.map(([k, l]) => `<label class="lab-chk"><input type="checkbox" name="rt_${k}" ${cur.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+        <div class="field"><label>Em poucas palavras (opcional)</label><input name="rating_note" value="${esc(it.rating === r ? it.rating_note || '' : '')}" placeholder="Ex.: rosto cortado, mulher parece de banco de imagem"></div>`,
+      onOk: async v => {
+        const rating_tags = tags.map(t => t[0]).filter(k => v['rt_' + k]);
+        await api('/lab/' + id, { method: 'PATCH', body: { rating: r, rating_tags, rating_note: v.rating_note || null } });
+        toast('Avaliação salva'); view();
+      } });
+  },
   labEdit(el) { editMeta(+el.dataset.v); },
   labNew() { return studio({}); },
   labNewFrom(el) { return studio({ sourceId: +el.dataset.v }); },
   labStudio(el) { return studio({ id: +el.dataset.v }); },
   labDel(el) {
     const it = LAB.items.find(x => x.id === +el.dataset.v);
-    sheet({ title: `Apagar ${it ? it.code : ''}?`, body: '<p>Some do Laboratório (o anúncio no Face não muda).</p>', ok: 'Apagar', danger: true,
+    sheet({ title: `Apagar ${it ? it.code : ''}?`, body: `<p>Some do Laboratório (o anúncio no Face não muda).${it && it.kind !== 'elemento' && it.kind !== 'campeao' && !it.rating ? ' <b>Dica:</b> se apagou porque ficou ruim, marque <b>Ruim</b> antes — assim o Claude aprende e não repete.' : ''}</p>`, ok: 'Apagar', danger: true,
       onOk: async () => { await api('/lab/' + el.dataset.v, { method: 'DELETE' }); toast('Apagado'); view(); } });
   }
 });
