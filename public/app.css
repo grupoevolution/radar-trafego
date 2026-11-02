@@ -613,3 +613,13 @@ tfoot tr.tot td{border-top:1px solid var(--line-2);background:var(--surface-2);f
 .lab-img.el img{width:70%;height:70%;object-fit:contain}
 .lab-img .lab-v.bad{background:#E8212E}
 .st-pick button.bad{border-color:#E8212E;opacity:.55}
+
+/* Laboratório: ver foto grande + cartão não estica com nome comprido */
+.lab-c{min-width:0;grid-template-columns:minmax(0,1fr)}.lab-t b{min-width:0}.lab-rate button{min-width:0}
+[data-zoom]{cursor:zoom-in}
+.lab-lb{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:52px 12px 12px;gap:10px}
+.lab-lb img{max-width:100%;max-height:calc(100dvh - 130px);object-fit:contain;border-radius:8px;cursor:zoom-out}
+.lab-lb-x{position:absolute;top:10px;right:12px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+.lab-lb-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;color:#fff;font-size:13px}
+.lab-lb-bar button,.lab-lb-bar a{min-height:36px;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;font:600 13px inherit;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center}
+.lab-lb-bar button[aria-pressed="true"]{background:#fff;color:#111}

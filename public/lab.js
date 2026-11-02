@@ -11,7 +11,7 @@ const BANDS = [['#25D366', 'Verde'], ['#FFC21A', 'Amarelo'], ['#E8212E', 'Vermel
 const FONTS = [['Archivo Black', 'Grossa (padrão)'], ['Anton', 'Alta e fina'], ['Montserrat', 'Redonda']];
 const TERMS = ['Casada', 'Solteira', 'Divorciada', 'Viúva'];
 const ST = { pronto: ['info', 'Pronto pra subir'], testando: ['warn', 'Testando'], campeao: ['good', 'Campeão'], morreu: ['bad', 'Morreu'] };
-const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100, waEl: 0, pinEl: 0, isz: 100 };
+const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100, waEl: 0, pinEl: 0, isz: 100, zoom: 100 };
 // avaliação do dono: o que ficou ruim (o Claude lê pra não repetir)
 const RATE = { bom: ['good', 'Bom'], ok: ['warn', 'Pode melhorar'], ruim: ['bad', 'Ruim'] };
 const RTAGS = {
@@ -59,8 +59,8 @@ function stamp(ctx, im, cx, cy, hh) {
 }
 
 /* ───────── desenho do criativo (mesmo modelo das campeãs) ───────── */
-function cover(ctx, img, w, h, fy, flip) {
-  const r = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+function cover(ctx, img, w, h, fy, flip, zoom = 1) { // zoom > 1 aproxima e corta as bordas (ex.: barras do print do Instagram)
+  const r = Math.max(w / img.naturalWidth, h / img.naturalHeight) * zoom;
   const iw = img.naturalWidth * r, ih = img.naturalHeight * r;
   const x = (w - iw) / 2, y = -(ih - h) * fy;
   ctx.save();
@@ -100,7 +100,7 @@ function draw(cv, img, p, h) {
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, h);
   if (!img) { ctx.fillStyle = '#888'; ctx.font = '40px Arial'; ctx.textAlign = 'center'; ctx.fillText('Escolha uma foto', W / 2, h / 2); return; }
-  cover(ctx, img, W, h, p.fy, p.flip);
+  cover(ctx, img, W, h, p.fy, p.flip, (p.zoom || 100) / 100);
   if (p.pure) return;
   const sq = h === W, k = (p.size || 100) / 100;
   const ty = p.pos === 'cima' ? h * (sq ? 0.17 : 0.2) : p.pos === 'meio' ? h * 0.45 : h * (sq ? 0.6 : 0.6);
@@ -232,7 +232,7 @@ const rateBox = it => {
 const badPhoto = it => it.rating === 'ruim' || LAB.items.some(t => t.kind === 'teste' && t.source_id === it.id && t.rating && t.rating !== 'bom' && (t.rating_tags || []).includes('foto'));
 const period = it => [it.good_from && it.good_to ? `${A.shortDay(it.good_from)} a ${A.shortDay(it.good_to)}` : it.good_from ? `desde ${A.shortDay(it.good_from)}` : '', it.period_note].filter(Boolean).join(' · ');
 function cardChamp(it, i) {
-  return `<div class="card lab-c"><div class="lab-img" style="background-image:url('${url(it, thumbV(it))}')"><span class="rk">#${i + 1}</span>${it.live ? '<span class="lab-live">ATUAL</span>' : ''}${has(it, '9x16') && has(it, '1x1') ? '<span class="lab-v">quadrado + stories</span>' : ''}</div>
+  return `<div class="card lab-c"><div class="lab-img" data-zoom="${it.id}" style="background-image:url('${url(it, thumbV(it))}')"><span class="rk">#${i + 1}</span>${it.live ? '<span class="lab-live">ATUAL</span>' : ''}${has(it, '9x16') && has(it, '1x1') ? '<span class="lab-v">quadrado + stories</span>' : ''}</div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.headline || it.code)}</b><span class="faint num">${it.code}</span></div>
       ${it.headline ? `<span class="lab-h">${esc(it.headline)}</span>` : ''}
       ${period(it) ? `<span class="faint" style="font-size:12px">${ic('calendar')}Bom: ${esc(period(it))}</span>` : ''}
@@ -242,7 +242,7 @@ function cardChamp(it, i) {
       <div class="btns">${dlBtns(it)}<button class="btn sm${it.live ? ' primary' : ''}" data-act="labLive" data-v="${it.id}" aria-pressed="${!!it.live}">${ic('check')}${it.live ? 'Atual' : 'Marcar atual'}</button><button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Editar</button>${it.kind === 'teste' ? `<button class="btn sm" data-act="labStudio" data-v="${it.id}">${ic('image')}Abrir no Estúdio</button>` : ''}<button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
 function cardImg(it) {
-  return `<div class="card lab-c"><div class="lab-img tall" style="background-image:url('${url(it, thumbV(it))}')">${badPhoto(it) ? '<span class="lab-v bad">reprovada</span>' : it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
+  return `<div class="card lab-c"><div class="lab-img tall" data-zoom="${it.id}" style="background-image:url('${url(it, thumbV(it))}')">${badPhoto(it) ? '<span class="lab-v bad">reprovada</span>' : it.used ? '<span class="lab-v">já usada</span>' : ''}</div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.code)}</b><span class="faint num">${it.code}</span></div>
       <span class="faint" style="font-size:12px">${it.sub === 'campeoes' ? 'Foto de campeão' : 'Banco'} · ${it.added_by === 'claude' ? 'Claude' : 'você'}</span>
       ${it.tags && it.tags.length ? `<div class="lab-tags">${it.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
@@ -251,7 +251,7 @@ function cardImg(it) {
 }
 function cardTest(it) {
   const st = ST[it.status] || ST.pronto;
-  return `<div class="card lab-c"><div class="lab-pair">${has(it, '1x1') ? `<img loading="lazy" src="${url(it, '1x1')}" alt="">` : ''}${has(it, '9x16') ? `<img loading="lazy" class="st" src="${url(it, '9x16')}" alt="">` : ''}</div>
+  return `<div class="card lab-c"><div class="lab-pair">${has(it, '1x1') ? `<img loading="lazy" src="${url(it, '1x1')}" alt="" data-zoom="${it.id}" data-zv="1x1">` : ''}${has(it, '9x16') ? `<img loading="lazy" class="st" src="${url(it, '9x16')}" alt="" data-zoom="${it.id}" data-zv="9x16">` : ''}</div>
     <div class="lab-b"><div class="lab-t"><b class="num" style="font-size:16px">${it.code}</b><span class="pill p-${st[0]}">${st[1]}</span></div>
       ${it.headline ? `<span class="lab-h">${esc(it.headline)}</span>` : ''}
       ${it.notes ? `<p class="faint" style="font-size:12px;margin:0">${esc(it.notes)}</p>` : ''}
@@ -263,7 +263,7 @@ function cardTest(it) {
 }
 
 function cardEl(it) {
-  return `<div class="card lab-c"><div class="lab-img el"><img src="${url(it, 'orig')}" alt="${esc(it.title || it.code)}"></div>
+  return `<div class="card lab-c"><div class="lab-img el" data-zoom="${it.id}"><img src="${url(it, 'orig')}" alt="${esc(it.title || it.code)}"></div>
     <div class="lab-b"><div class="lab-t"><b>${esc(it.title || it.code)}</b><span class="faint num">${it.code}</span></div>
       <div class="btns">${dlBtns(it)}<button class="btn sm" data-act="labEdit" data-v="${it.id}">${ic('edit')}Renomear</button><button class="btn sm danger" data-act="labDel" data-v="${it.id}" aria-label="Apagar">${ic('trash')}</button></div></div></div>`;
 }
@@ -374,6 +374,7 @@ async function studio({ id, sourceId } = {}) {
       <div class="form-row"><div class="field"><label>Faixa</label><input id="sB" value="${esc(p.band)}"></div><div class="field"><label>Jeito do botão</label><select id="sBs">${BSTYLES.map(([k, l]) => `<option value="${k}" ${p.bstyle === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Cor da faixa</label><select id="sC">${BANDS.map(([c, l]) => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Fonte</label><select id="sF">${FONTS.map(([f, l]) => `<option value="${f}" ${p.font === f ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Texto em</label><select id="sP">${[['baixo', 'Baixo'], ['meio', 'Meio'], ['cima', 'Cima']].map(([k, l]) => `<option value="${k}" ${p.pos === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Enquadrar foto (cima ↔ baixo)</label><input id="sY" type="range" min="0" max="1" step="0.02" value="${p.fy}"></div><div class="field"><label>Tamanho do texto</label><input id="sS" type="range" min="70" max="130" step="5" value="${p.size}"></div></div>
+      <div class="field"><label>Aproximar foto (corta bordas, ex.: print do Instagram)</label><input id="sZ" type="range" min="100" max="180" step="2" value="${p.zoom || 100}"></div>
       <div class="form-row"><div class="field"><label>Ícone do canto / da pílula</label><select id="sWe">${elOpts(p.waEl)}</select></div><div class="field"><label>Alfinete</label><select id="sPe">${elOpts(p.pinEl)}</select></div><div class="field"><label>Tamanho do ícone</label><input id="sIz" type="range" min="50" max="160" step="5" value="${p.isz}"></div></div>
       ${els.length ? '' : '<p class="faint" style="font-size:12px;margin:0">Suba o ícone do WhatsApp em <b>Elementos</b> pra usar o oficial no lugar do desenhado.</p>'}
       <div class="st-checks">${[['flip', 'Inverter foto'], ['pin', 'Alfinete'], ['wa', 'Ícone verde'], ['arrow', 'Seta'], ['pure', 'Só a foto (sem texto)']].map(([k, l]) => `<label><input type="checkbox" id="k_${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
@@ -386,7 +387,7 @@ async function studio({ id, sourceId } = {}) {
   $('#stClose').onclick = close;
   s.onclick = e => { if (e.target === s) close(); };
   const c1 = $('#c1'), c2 = $('#c2');
-  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value, waEl: +$('#sWe').value, pinEl: +$('#sPe').value, isz: +$('#sIz').value,
+  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value, zoom: +$('#sZ').value, waEl: +$('#sWe').value, pinEl: +$('#sPe').value, isz: +$('#sIz').value,
     ...Object.fromEntries(['flip', 'pin', 'wa', 'arrow', 'pure'].map(k => [k, $('#k_' + k).checked])) });
   const redraw = () => { read(); draw(c1, img, p, H1); draw(c2, img, p, H2); };
   const setSrc = async id2 => {
@@ -419,6 +420,29 @@ async function studio({ id, sourceId } = {}) {
   $('#stSave').onclick = () => save(false);
   if ($('#stCopy')) $('#stCopy').onclick = () => save(true);
 }
+
+/* ───────── ver a foto grande (toque na foto em qualquer aba) ───────── */
+function zoomView(id, v) {
+  const it = LAB.items.find(x => x.id === id); if (!it) return;
+  const vs = ['1x1', '9x16', 'orig'].filter(x => has(it, x));
+  let cur = vs.includes(v) ? v : vs[0];
+  const lb = document.createElement('div');
+  lb.className = 'lab-lb'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true');
+  const paint = () => {
+    lb.innerHTML = `<button class="lab-lb-x" aria-label="Fechar">×</button><img src="${url(it, cur)}" alt="${esc(it.code)}">
+      <div class="lab-lb-bar"><b>${esc(it.code)}</b>${vs.length > 1 ? vs.map(x => `<button data-zv2="${x}" aria-pressed="${x === cur}">${x === '1x1' ? 'Quadrado' : x === '9x16' ? 'Stories' : 'Original'}</button>`).join('') : ''}<a href="${url(it, cur)}&dl=1" download>Baixar</a></div>`;
+  };
+  const close = () => { lb.remove(); document.removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') close(); };
+  lb.onclick = e => { const b = e.target.closest('[data-zv2]'); if (b) { cur = b.dataset.zv2; paint(); return; } if (!e.target.closest('a,.lab-lb-bar')) close(); };
+  document.addEventListener('keydown', key);
+  paint(); document.body.appendChild(lb);
+}
+document.addEventListener('click', e => {
+  const z = e.target.closest && e.target.closest('[data-zoom]');
+  if (!z || e.target.closest('button,a,select')) return;
+  zoomView(+z.dataset.zoom, z.dataset.zv);
+});
 
 /* ───────── ações ───────── */
 Object.assign(A.ACT, {
