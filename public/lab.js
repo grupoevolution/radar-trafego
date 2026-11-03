@@ -8,10 +8,10 @@ const { $, $$, ic, esc, nf, brl, f2, api, toast, sheet } = A;
 const W = 1080, H1 = 1080, H2 = 1920;
 const GREEN = '#25D366';
 const BANDS = [['#25D366', 'Verde'], ['#FFC21A', 'Amarelo'], ['#E8212E', 'Vermelho'], ['#111111', 'Preto']];
-const FONTS = [['Archivo Black', 'Grossa (padrão)'], ['Anton', 'Alta e fina'], ['Montserrat', 'Redonda']];
+const FONTS = [['Archivo Black', 'Grossa (padrão)'], ['Anton', 'Alta e fina'], ['Montserrat', 'Redonda'], ['Permanent Marker', 'Pincel']];
 const TERMS = ['Casada', 'Solteira', 'Divorciada', 'Viúva'];
 const ST = { pronto: ['info', 'Pronto pra subir'], testando: ['warn', 'Testando'], campeao: ['good', 'Campeão'], morreu: ['bad', 'Morreu'] };
-const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100, waEl: 0, pinEl: 0, isz: 100, zoom: 100 };
+const DEF = { line1: '2 KM DE VOCÊ!', line2: 'Eliene 36, Casada!', line3: '', band: 'CLICA NO BOTÃO', bstyle: 'pill', pin: true, wa: true, arrow: true, flip: false, pure: false, pos: 'baixo', fy: 0.2, color: GREEN, font: 'Archivo Black', size: 100, waEl: 0, pinEl: 0, isz: 100, zoom: 100, tyo: 0, box: '', wpos: 'auto', deco: false };
 // avaliação do dono: o que ficou ruim (o Claude lê pra não repetir)
 const RATE = { bom: ['good', 'Bom'], ok: ['warn', 'Pode melhorar'], ruim: ['bad', 'Ruim'] };
 const RTAGS = {
@@ -21,7 +21,9 @@ const RTAGS = {
 const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z"/></svg>';
 const ELIMG = {}; // elementos (PNG) já carregados pro Estúdio: id → Image
 // jeitos de botão que já venderam: pílula (CLICA NO BOTÃO), barra no rodapé (CLIQUE EM SAIBA MAIS!), pílula com ícone do WhatsApp
-const BSTYLES = [['pill', 'Pílula'], ['bar', 'Barra no rodapé'], ['wa', 'Pílula com WhatsApp']];
+const BSTYLES = [['pill', 'Pílula'], ['bar', 'Barra no rodapé'], ['wa', 'Pílula com WhatsApp'], ['ol', 'Contorno amarelo']];
+const BOXES = [['', 'Sem caixa (sombra)'], ['verde', 'Verde'], ['preto', 'Preta'], ['vermelho', 'Vermelha']];
+const WPOS = [['auto', 'Automático'], ['sd', 'Em cima, direita'], ['se', 'Em cima, esquerda'], ['id', 'Embaixo, direita'], ['ie', 'Embaixo, esquerda']];
 
 let LAB = null, tab = 'campeoes', imgSub = 'todas', tstSt = 'todos', chSt = 'todos';
 const url = (it, v) => `/api/lab/file/${it.id}/${v}?v=${new Date(it.updated_at).getTime()}`;
@@ -104,81 +106,118 @@ function draw(cv, img, p, h) {
   cover(ctx, img, W, h, p.fy, p.flip, (p.zoom || 100) / 100);
   if (p.pure) return;
   const sq = h === W, k = (p.size || 100) / 100;
-  const ty = p.pos === 'cima' ? h * (sq ? 0.17 : 0.2) : p.pos === 'meio' ? h * 0.45 : h * (sq ? 0.6 : 0.6);
-  // sombra atrás do texto pra ler bem
-  const g = ctx.createLinearGradient(0, ty - h * 0.12, 0, ty + h * (sq ? 0.25 : 0.16));
-  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,.42)'); g.addColorStop(0.75, 'rgba(0,0,0,.42)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, ty - h * 0.12, W, h * (sq ? 0.37 : 0.28));
+  // altura do texto: posição base + ajuste fino (tyo, -0,3 a +0,3 da altura)
+  const ty = (p.pos === 'cima' ? h * (sq ? 0.17 : 0.2) : p.pos === 'meio' ? h * 0.45 : h * 0.6) + h * (+p.tyo || 0);
+  const BOX = { verde: 'rgba(37,211,102,.94)', preto: 'rgba(0,0,0,.8)', branco: 'rgba(255,255,255,.94)', vermelho: 'rgba(232,33,46,.94)' };
+  if (!BOX[p.box]) { // sombra atrás do texto pra ler bem
+    const g = ctx.createLinearGradient(0, ty - h * 0.12, 0, ty + h * (sq ? 0.25 : 0.16));
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,.42)'); g.addColorStop(0.75, 'rgba(0,0,0,.42)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, ty - h * 0.12, W, h * (sq ? 0.37 : 0.28));
+  }
   ctx.textBaseline = 'middle';
-  let y = ty;
-  if (p.line1) {
-    const s1 = fitFont(ctx, p.line1, p.font, Math.round(92 * k), W * (p.pin ? 0.8 : 0.9));
-    const pe = p.pin && ELIMG[p.pinEl], ph = s1 * 1.1, pw = pe ? ph * pe.naturalWidth / pe.naturalHeight + 14 : 70;
-    const tw = ctx.measureText(p.line1).width, x0 = (W - tw - (p.pin ? pw : 0)) / 2;
-    if (pe) stamp(ctx, pe, x0 + (pw - 14) / 2, y - 4, ph);
-    else if (p.pin) pin(ctx, x0 + 26, y - 20, 24 * k);
-    ctx.textAlign = 'left'; stroked(ctx, p.line1, x0 + (p.pin ? pw : 0), y, Math.max(6, s1 * 0.13));
-    y += s1 * 0.5 + 44 * k;
-  }
-  if (p.line2) {
-    ctx.textAlign = 'center';
-    const s2 = fitFont(ctx, p.line2, p.font === 'Anton' ? 'Anton' : 'Montserrat', Math.round(64 * k), W * 0.9);
-    stroked(ctx, p.line2, W / 2, y, Math.max(5, s2 * 0.12));
-    y += s2 * 0.5 + 34 * k;
-  }
-  if (p.line3) {
-    ctx.textAlign = 'center';
-    ctx.font = `600 ${Math.round(50 * k)}px "Montserrat", Arial, sans-serif`;
-    const s3 = fitFont(ctx, p.line3, 'Montserrat', Math.round(50 * k), W * 0.86);
-    ctx.font = `700 ${s3}px "Montserrat", Arial, sans-serif`;
-    stroked(ctx, p.line3, W / 2, y - 4 * k, Math.max(4, s3 * 0.14));
-    y += s3 * 0.5 + 30 * k;
-  }
-  if (p.band && p.bstyle === 'bar') { // barra inteira no rodapé (CLIQUE EM SAIBA MAIS!)
-    const fb = fitFont(ctx, p.band, p.font, Math.round(54 * k), W * 0.9), bh = fb * 1.7;
-    const by = h === W ? h - bh : h * 0.8; // no stories, acima da área que o botão do Instagram cobre
-    ctx.fillStyle = p.color; ctx.fillRect(0, by, W, bh);
-    const dark = p.color === '#FFC21A';
-    ctx.textAlign = 'center'; ctx.fillStyle = dark ? '#111' : '#fff';
-    if (!dark) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(p.band, W / 2, by + bh / 2); }
-    ctx.fillText(p.band, W / 2, by + bh / 2);
-  } else if (p.band && p.bstyle === 'wa') { // pílula com o ícone do WhatsApp na ponta
-    const fb = fitFont(ctx, p.band, p.font, Math.round(40 * k), W * 0.6), bh = fb * 1.9;
-    const bw = ctx.measureText(p.band).width + bh + 60, bx = (W - bw) / 2;
-    ctx.fillStyle = p.color === '#111111' ? '#111' : GREEN; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.stroke();
-    const r = bh * 0.36, cx = bx + bh / 2 + 4, cy = y + bh / 2;
-    if (ELIMG[p.waEl]) stamp(ctx, ELIMG[p.waEl], cx, cy, r * 2.3);
-    else {
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, r / 5); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = Math.max(5, r / 3.2); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 0.55, Math.PI * 1.2); ctx.stroke(); ctx.lineCap = 'butt';
+  // o bloco de texto roda 2x: a 1ª invisível só mede a altura (pra caixa atrás do texto), a 2ª desenha
+  const block = () => {
+    let y = ty, top = null;
+    if (p.line1) {
+      const s1 = fitFont(ctx, p.line1, p.font, Math.round(92 * k), W * (p.pin ? 0.8 : 0.9));
+      top = y - s1 * 0.75;
+      const pe = p.pin && ELIMG[p.pinEl], ph = s1 * 1.1, pw = pe ? ph * pe.naturalWidth / pe.naturalHeight + 14 : 70;
+      const tw = ctx.measureText(p.line1).width, x0 = (W - tw - (p.pin ? pw : 0)) / 2;
+      if (pe) stamp(ctx, pe, x0 + (pw - 14) / 2, y - 4, ph);
+      else if (p.pin) pin(ctx, x0 + 26, y - 20, 24 * k);
+      ctx.textAlign = 'left'; stroked(ctx, p.line1, x0 + (p.pin ? pw : 0), y, Math.max(6, s1 * 0.13));
+      if (p.deco) brush(ctx, x0 + (p.pin ? pw : 0) - 10, x0 + (p.pin ? pw : 0) + tw + 10, y + s1 * 0.55, k);
+      y += s1 * 0.5 + (p.deco ? 60 : 44) * k;
     }
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(p.band, bx + bh + 20, cy);
-  } else if (p.band) {
-    const fb = fitFont(ctx, p.band, p.font, Math.round(46 * k), W * 0.7);
-    const bw = ctx.measureText(p.band).width + (p.arrow ? 110 : 64), bh = fb * 1.55, bx = (W - bw) / 2;
-    ctx.fillStyle = p.color; roundRect(ctx, bx, y, bw, bh, 14); ctx.fill();
-    const dark = p.color === '#FFC21A';
-    ctx.fillStyle = dark ? '#111' : '#fff'; ctx.textAlign = 'left';
-    if (!dark) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(p.band, bx + 30, y + bh / 2); }
-    ctx.fillText(p.band, bx + 30, y + bh / 2);
-    if (p.arrow) {
-      const ax = bx + bw - 50, ay = y + bh / 2; ctx.fillStyle = p.color === '#E8212E' ? '#fff' : '#E61E28';
-      ctx.fillRect(ax - 7, ay - 22, 14, 18); ctx.beginPath(); ctx.moveTo(ax - 18, ay - 6); ctx.lineTo(ax + 18, ay - 6); ctx.lineTo(ax, ay + 20); ctx.closePath(); ctx.fill();
+    if (p.line2) {
+      ctx.textAlign = 'center';
+      const s2 = fitFont(ctx, p.line2, p.font === 'Anton' ? 'Anton' : 'Montserrat', Math.round(64 * k), W * 0.9);
+      if (top == null) top = y - s2 * 0.75;
+      stroked(ctx, p.line2, W / 2, y, Math.max(5, s2 * 0.12));
+      if (p.deco) { const t2 = ctx.measureText(p.line2).width; brush(ctx, (W - t2) / 2 - 10, (W + t2) / 2 + 10, y + s2 * 0.6, k * 0.8); }
+      y += s2 * 0.5 + (p.deco ? 46 : 34) * k;
     }
+    if (p.line3) {
+      ctx.textAlign = 'center';
+      const s3 = fitFont(ctx, p.line3, 'Montserrat', Math.round(50 * k), W * 0.86);
+      if (top == null) top = y - s3 * 0.75;
+      ctx.font = `700 ${s3}px "Montserrat", Arial, sans-serif`;
+      stroked(ctx, p.line3, W / 2, y - 4 * k, Math.max(4, s3 * 0.14));
+      y += s3 * 0.5 + 30 * k;
+    }
+    if (p.band && p.bstyle === 'bar') { // barra inteira no rodapé (CLIQUE EM SAIBA MAIS!)
+      const fb = fitFont(ctx, p.band, p.font, Math.round(54 * k), W * 0.9), bh = fb * 1.7;
+      const by = h === W ? h - bh : h * 0.8; // no stories, acima da área que o botão do Instagram cobre
+      ctx.fillStyle = p.color; ctx.fillRect(0, by, W, bh);
+      const dark = p.color === '#FFC21A';
+      ctx.textAlign = 'center'; ctx.fillStyle = dark ? '#111' : '#fff';
+      if (!dark) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(p.band, W / 2, by + bh / 2); }
+      ctx.fillText(p.band, W / 2, by + bh / 2);
+    } else if (p.band && p.bstyle === 'wa') { // pílula com o ícone do WhatsApp na ponta
+      const fb = fitFont(ctx, p.band, p.font, Math.round(40 * k), W * 0.6), bh = fb * 1.9;
+      const bw = ctx.measureText(p.band).width + bh + 60, bx = (W - bw) / 2;
+      ctx.fillStyle = p.color === '#111111' ? '#111' : GREEN; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.stroke();
+      const r = bh * 0.36, cx = bx + bh / 2 + 4, cy = y + bh / 2;
+      if (ELIMG[p.waEl]) stamp(ctx, ELIMG[p.waEl], cx, cy, r * 2.3);
+      else {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(4, r / 5); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = Math.max(5, r / 3.2); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 0.55, Math.PI * 1.2); ctx.stroke(); ctx.lineCap = 'butt';
+      }
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(p.band, bx + bh + 20, cy);
+      y += bh;
+    } else if (p.band && p.bstyle === 'ol') { // pílula só com contorno amarelo (estilo do criativo que a IA do Face fez)
+      const fb = fitFont(ctx, p.band, 'Montserrat', Math.round(46 * k), W * 0.66);
+      const bw = ctx.measureText(p.band).width + (p.arrow ? 120 : 70), bh = fb * 1.7, bx = (W - bw) / 2;
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.fill();
+      ctx.strokeStyle = '#F5C518'; ctx.lineWidth = 6 * k; roundRect(ctx, bx, y, bw, bh, bh / 2); ctx.stroke();
+      ctx.textAlign = 'left'; stroked(ctx, p.band, bx + 36, y + bh / 2, 4);
+      if (p.arrow) {
+        const ax = bx + bw - 52, ay = y + bh / 2; ctx.fillStyle = '#E61E28';
+        ctx.fillRect(ax - 7, ay - 22, 14, 18); ctx.beginPath(); ctx.moveTo(ax - 18, ay - 6); ctx.lineTo(ax + 18, ay - 6); ctx.lineTo(ax, ay + 20); ctx.closePath(); ctx.fill();
+      }
+      y += bh;
+    } else if (p.band) {
+      const fb = fitFont(ctx, p.band, p.font, Math.round(46 * k), W * 0.7);
+      const bw = ctx.measureText(p.band).width + (p.arrow ? 110 : 64), bh = fb * 1.55, bx = (W - bw) / 2;
+      ctx.fillStyle = p.color; roundRect(ctx, bx, y, bw, bh, 14); ctx.fill();
+      const dark = p.color === '#FFC21A';
+      ctx.fillStyle = dark ? '#111' : '#fff'; ctx.textAlign = 'left';
+      if (!dark) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(p.band, bx + 30, y + bh / 2); }
+      ctx.fillText(p.band, bx + 30, y + bh / 2);
+      if (p.arrow) {
+        const ax = bx + bw - 50, ay = y + bh / 2; ctx.fillStyle = p.color === '#E8212E' ? '#fff' : '#E61E28';
+        ctx.fillRect(ax - 7, ay - 22, 14, 18); ctx.beginPath(); ctx.moveTo(ax - 18, ay - 6); ctx.lineTo(ax + 18, ay - 6); ctx.lineTo(ax, ay + 20); ctx.closePath(); ctx.fill();
+      }
+      y += bh;
+    }
+    return { top: top == null ? ty : top, bottom: y };
+  };
+  if (BOX[p.box]) { // caixa sólida atrás do texto (cobre o decote de verdade)
+    ctx.save(); ctx.globalAlpha = 0; const m = block(); ctx.restore();
+    ctx.fillStyle = BOX[p.box]; roundRect(ctx, W * 0.05, m.top - 18 * k, W * 0.9, m.bottom - m.top + 40 * k, 28 * k); ctx.fill();
   }
-  if (p.wa) {
-    const cx = p.pos === 'cima' ? W * 0.16 : W * 0.84, cy = p.pos === 'cima' ? h * (sq ? 0.86 : 0.76) : h * (sq ? 0.13 : 0.17), z = (p.isz || 100) / 100;
+  block();
+  if (p.wa) { // canto do ícone: automático (oposto ao texto) ou escolhido
+    const wp = p.wpos && p.wpos !== 'auto' ? p.wpos : p.pos === 'cima' ? 'ie' : 'sd';
+    const cx = wp[1] === 'e' ? W * 0.16 : W * 0.84, cy = wp[0] === 'i' ? h * (sq ? 0.86 : 0.76) : h * (sq ? 0.13 : 0.17), z = (p.isz || 100) / 100;
     if (ELIMG[p.waEl]) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5; stamp(ctx, ELIMG[p.waEl], cx, cy, 175 * z); ctx.restore(); }
     else waIcon(ctx, cx, cy, 78 * z);
   }
+}
+// risco de pincel amarelo embaixo do texto (estilo do criativo da IA do Face)
+function brush(ctx, x1, x2, y, k) {
+  ctx.save(); ctx.strokeStyle = '#F5C518'; ctx.lineCap = 'round';
+  ctx.lineWidth = 9 * k; ctx.beginPath(); ctx.moveTo(x1, y + 4 * k); ctx.quadraticCurveTo((x1 + x2) / 2, y - 6 * k, x2, y); ctx.stroke();
+  ctx.lineWidth = 4 * k; ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.moveTo(x1 + 30 * k, y + 14 * k); ctx.quadraticCurveTo((x1 + x2) / 2, y + 6 * k, x2 - 40 * k, y + 12 * k); ctx.stroke();
+  ctx.restore();
 }
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 let fontsReady = null;
 function loadFonts() {
   if (fontsReady) return fontsReady;
-  if (!$('#labFonts')) { const l = document.createElement('link'); l.id = 'labFonts'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Montserrat:wght@800;900&display=swap'; document.head.appendChild(l); }
-  fontsReady = Promise.all(['92px "Archivo Black"', '92px "Anton"', '900 64px "Montserrat"'].map(f => document.fonts.load(f).catch(() => null))).then(() => true);
+  if (!$('#labFonts')) { const l = document.createElement('link'); l.id = 'labFonts'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Montserrat:wght@700;800;900&family=Permanent+Marker&display=swap'; document.head.appendChild(l); }
+  fontsReady = Promise.all(['92px "Archivo Black"', '92px "Anton"', '900 64px "Montserrat"', '700 50px "Montserrat"', '92px "Permanent Marker"'].map(f => document.fonts.load(f).catch(() => null))).then(() => true);
   return fontsReady;
 }
 
@@ -376,10 +415,11 @@ async function studio({ id, sourceId } = {}) {
       <div class="form-row"><div class="field"><label>Faixa</label><input id="sB" value="${esc(p.band)}"></div><div class="field"><label>Jeito do botão</label><select id="sBs">${BSTYLES.map(([k, l]) => `<option value="${k}" ${p.bstyle === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Cor da faixa</label><select id="sC">${BANDS.map(([c, l]) => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Fonte</label><select id="sF">${FONTS.map(([f, l]) => `<option value="${f}" ${p.font === f ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Texto em</label><select id="sP">${[['baixo', 'Baixo'], ['meio', 'Meio'], ['cima', 'Cima']].map(([k, l]) => `<option value="${k}" ${p.pos === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Enquadrar foto (cima ↔ baixo)</label><input id="sY" type="range" min="0" max="1" step="0.02" value="${p.fy}"></div><div class="field"><label>Tamanho do texto</label><input id="sS" type="range" min="70" max="130" step="5" value="${p.size}"></div></div>
-      <div class="field"><label>Aproximar foto (corta bordas, ex.: print do Instagram)</label><input id="sZ" type="range" min="100" max="180" step="2" value="${p.zoom || 100}"></div>
+      <div class="form-row"><div class="field"><label>Aproximar foto (corta bordas, ex.: print do Instagram)</label><input id="sZ" type="range" min="100" max="200" step="2" value="${p.zoom || 100}"></div><div class="field"><label>Subir ↔ descer o texto</label><input id="sTy" type="range" min="-0.3" max="0.3" step="0.01" value="${p.tyo || 0}"></div></div>
+      <div class="form-row"><div class="field"><label>Caixa atrás do texto (cobre decote)</label><select id="sBx">${BOXES.map(([k, l]) => `<option value="${k}" ${(p.box || '') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div><div class="field"><label>Canto do ícone</label><select id="sWp">${WPOS.map(([k, l]) => `<option value="${k}" ${(p.wpos || 'auto') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
       <div class="form-row"><div class="field"><label>Ícone do canto / da pílula</label><select id="sWe">${elOpts(p.waEl)}</select></div><div class="field"><label>Alfinete</label><select id="sPe">${elOpts(p.pinEl)}</select></div><div class="field"><label>Tamanho do ícone</label><input id="sIz" type="range" min="50" max="160" step="5" value="${p.isz}"></div></div>
       ${els.length ? '' : '<p class="faint" style="font-size:12px;margin:0">Suba o ícone do WhatsApp em <b>Elementos</b> pra usar o oficial no lugar do desenhado.</p>'}
-      <div class="st-checks">${[['flip', 'Inverter foto'], ['pin', 'Alfinete'], ['wa', 'Ícone verde'], ['arrow', 'Seta'], ['pure', 'Só a foto (sem texto)']].map(([k, l]) => `<label><input type="checkbox" id="k_${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+      <div class="st-checks">${[['flip', 'Inverter foto'], ['pin', 'Alfinete'], ['wa', 'Ícone verde'], ['arrow', 'Seta'], ['deco', 'Riscos amarelos'], ['pure', 'Só a foto (sem texto)']].map(([k, l]) => `<label><input type="checkbox" id="k_${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
       <div class="field"><label>Observação do teste</label><input id="sN" value="${esc((ed && ed.notes) || '')}" placeholder="Ex.: mesma foto da LAB-003 com Viúva"></div>
     </div></div>
     <div class="err" id="sheetErr"></div>
@@ -389,8 +429,8 @@ async function studio({ id, sourceId } = {}) {
   $('#stClose').onclick = close;
   s.onclick = e => { if (e.target === s) close(); };
   const c1 = $('#c1'), c2 = $('#c2');
-  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value, zoom: +$('#sZ').value, waEl: +$('#sWe').value, pinEl: +$('#sPe').value, isz: +$('#sIz').value,
-    ...Object.fromEntries(['flip', 'pin', 'wa', 'arrow', 'pure'].map(k => [k, $('#k_' + k).checked])) });
+  const read = () => Object.assign(p, { line1: $('#sL1').value, line2: $('#sL2').value, line3: $('#sL3').value, bstyle: $('#sBs').value, band: $('#sB').value, color: $('#sC').value, font: $('#sF').value, pos: $('#sP').value, fy: +$('#sY').value, size: +$('#sS').value, zoom: +$('#sZ').value, tyo: +$('#sTy').value, box: $('#sBx').value, wpos: $('#sWp').value, waEl: +$('#sWe').value, pinEl: +$('#sPe').value, isz: +$('#sIz').value,
+    ...Object.fromEntries(['flip', 'pin', 'wa', 'arrow', 'deco', 'pure'].map(k => [k, $('#k_' + k).checked])) });
   const redraw = () => { read(); draw(c1, img, p, H1); draw(c2, img, p, H2); };
   const setSrc = async id2 => {
     const x = LAB.items.find(y => y.id === id2); if (!x) return;
