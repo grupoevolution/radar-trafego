@@ -293,9 +293,9 @@ let mobTab = 'hoje';
 const VIEWS = {
   geral: ['Visão geral', 'home'], metas: ['Metas', 'flag'], camp: ['Campanhas', 'list'], cre: ['Criativos', 'image'], contas: ['Contingência', 'tree'],
   regras: ['Aprovações', 'check'], rel: ['Relatórios', 'doc'], int: ['Conexões', 'plug'], diag: ['O que mudou', 'pulse'], escala: ['Escala', 'trend'],
-  lab: ['Laboratório de criativos', 'flask']
+  lab: ['Laboratório de criativos', 'flask'], saude: ['Saúde do app', 'pulse']
 };
-const GROUPS = [['Acompanhar', ['geral', 'metas', 'camp', 'cre']], ['Criativos', ['lab']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['diag', 'escala']]];
+const GROUPS = [['Acompanhar', ['geral', 'metas', 'camp', 'cre']], ['Criativos', ['lab']], ['Operação', ['contas', 'regras', 'rel', 'int']], ['Análises', ['saude', 'diag', 'escala']]];
 const HASHMAP = { aprovar: ['regras', 'aprovar'], alertas: ['geral', 'alertas'], rel: ['rel', 'rel'] };
 const isMobile = () => window.innerWidth < 760 && store.get('radar-full') !== '1';
 
@@ -1084,10 +1084,11 @@ async function mob(t) {
   let pend = [];
   try { pend = await api('/actions?status=pending'); } catch (e) { return; }
   $('#mNav').innerHTML = MOB.map(([k, i, l]) => `<button data-act="mob" data-v="${k}" aria-current="${k === t}">${ic(i)}${l}${k === 'aprovar' && pend.length ? `<span class="count">${pend.length}</span>` : ''}</button>`).join('');
-  $('#mTitle').textContent = MOB.find(m => m[0] === t)[2];
+  $('#mTitle').textContent = t === 'saude' ? 'Saúde do app' : MOB.find(m => m[0] === t)[2];
   const B = $('#mBody');
   try {
     if (t === 'lab') { await RENDER.lab(); }
+    else if (t === 'saude') { await RENDER.saude(); }
     else if (t === 'hoje') {
       const o = await api('/overview');
       const c = o.cur, p = o.prev, bud = o.budget_goal || o.targets.daily_budget_goal, C = 2 * Math.PI * 50, fill = Math.min(1, div(c.roi, o.targets.roi_goal * 1.25));
@@ -1114,7 +1115,7 @@ async function mob(t) {
         (pend.length ? pend.map(approveCard).join('') : `<div class="empty">${ic('check')}Nada esperando.</div>`);
     } else if (t === 'alertas') {
       const al = await api('/alerts');
-      B.innerHTML = `<div class="card card-b rows">${al.length ? al.map(alertRow).join('') : `<div class="empty">${ic('check')}Nenhum alerta.</div>`}</div>`;
+      B.innerHTML = `<button class="btn block" data-act="mob" data-v="saude">${ic('pulse')}Ver a saúde do app</button><div class="card card-b rows">${al.length ? al.map(alertRow).join('') : `<div class="empty">${ic('check')}Nenhum alerta.</div>`}</div>`;
       api('/alerts/seen', { body: {} }).catch(() => {});
     } else if (t === 'rel') {
       const list = await api('/reports?period=' + relPer);

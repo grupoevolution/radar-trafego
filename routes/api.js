@@ -15,6 +15,7 @@ const { COOKIE, sign, requireAdmin, requireClaude } = require('../lib/auth');
 const reports = require('../lib/reports');
 const creatives = require('../lib/creatives');
 const lab = require('../lib/lab');
+const apphealth = require('../lib/apphealth');
 const r2 = v => Math.round((v || 0) * 100) / 100;
 
 const router = express.Router();
@@ -48,12 +49,20 @@ router.post('/logout', (req, res) => { res.clearCookie(COOKIE); res.json({ ok: t
 router.get('/claude/snapshot', requireClaude, wrap(async (req, res) => {
   const day = dayParam(req.query.day, T.yesterday());
   const period = req.query.period;
-  res.json(period === 'week' || period === 'month' ? await reports.snapshotPeriod(period, day) : await reports.snapshot(day));
+  if (period === 'week' || period === 'month') return res.json(await reports.snapshotPeriod(period, day));
+  const snap = await reports.snapshot(day);
+  // saúde do app no dia: o relatório separa "o app travou" de "a venda caiu por outro motivo"
+  const h = await apphealth.dayReport(day).catch(() => null);
+  if (h) snap.app_health = { summary: h.summary, slumps: h.slumps, incidents: h.incidents.map(i => ({ time: i.time, mins: i.mins, body: i.body, errors: i.errors, causes: i.causes.map(c => c.text) })) };
+  res.json(snap);
 }));
 router.post('/reports', requireClaude, wrap(async (req, res) => {
   res.json(await reports.create(req.body));
 }));
 router.get('/claude/guide', requireClaude, (req, res) => res.type('text/plain').send(reports.GUIDE));
+
+// ── SAÚDE DO APP (painel ou Claude com a chave dele) ──────────────────────
+router.get('/apphealth', requireClaude, wrap(async (req, res) => res.json(await apphealth.dayReport(dayParam(req.query.day, T.today())))));
 
 // ── LABORATÓRIO DE CRIATIVOS (painel ou Claude com a chave dele) ──────────
 router.get('/lab', requireClaude, wrap(async (req, res) => res.json(await lab.list())));
