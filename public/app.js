@@ -667,33 +667,39 @@ async function viewMetas() {
 }
 
 /* ── CAMPANHAS ── */
-let cp = { level: 'campaign', period: 'today', active: true };
+let cp = { level: 'campaign', period: 'today', active: true, sel: new Map() }; // sel: campanhas marcadas (id → nome)
 const SIG = { scale: ['good', 'Escalar'], keep: ['gold', 'Manter'], tired: ['warn', 'Cansando'], cut: ['bad', 'Desligar?'], learning: ['info', 'Aprendendo'], off: ['face', 'Desligada'], notag: ['face', 'Sem etiqueta'] };
 let campRows = [], campGuards = {};
 async function viewCamp() {
   const per = { today: [ME.today, ME.today], yesterday: [yday(), yday()], d7: [addD(ME.today, -6), ME.today] }[cp.period];
   const d = await api(`/campaigns?level=${cp.level}&from=${per[0]}&to=${per[1]}${bmQ('&')}`);
-  campRows = d.rows; campGuards = d.guards;
+  campGuards = d.guards;
   sub('O que o Face diz e o que caiu de verdade, lado a lado');
   topRight(bmPicker() + `<div class="seg" role="group" aria-label="Período">${[['today', 'Hoje'], ['yesterday', 'Ontem'], ['d7', '7 dias']].map(([k, l]) => `<button aria-pressed="${cp.period === k}" data-act="cpPeriod" data-v="${k}">${l}</button>`).join('')}</div>`);
-  const rows = d.rows.filter(r => !cp.active || r.status === 'ACTIVE' || r.spend > 0);
   const isC = cp.level === 'campaign';
+  let rows = d.rows.filter(r => !cp.active || r.status === 'ACTIVE' || r.spend > 0);
+  if (!isC && cp.sel.size) rows = rows.filter(r => cp.sel.has(r.campaign_id));
+  campRows = rows; // a linha i da tabela = campRows[i] (ligar/desligar e orçamento usam esse índice)
+  const selN = cp.sel.size, selName = selN === 1 ? [...cp.sel.values()][0] : `${selN} campanhas`;
+  const allSel = isC && rows.length > 0 && rows.every(r => cp.sel.has(r.id));
   $('#view').innerHTML = `
   ${bmNote()}
   <div class="banner note">${ic('info')}<div><h2 style="font-size:16px">A coluna azul é a venda que caiu de verdade</h2>
-    <p>Aparecem as campanhas de contas ativas e, nos dias em que gastaram, as de contas que caíram (marcadas com "conta caiu"). As vendas reais por campanha vêm da etiqueta do link (UTM): campanhas antigas sem etiqueta aparecem como "Sem etiqueta" e o ROI real delas fica no total do dia. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
+    <p>Aparecem as campanhas de contas ativas e, nos dias em que gastaram, as de contas que caíram (marcadas com "conta caiu"). As vendas reais por campanha vêm da etiqueta do link (UTM): campanhas antigas sem etiqueta aparecem como "Sem etiqueta" e o ROI real delas fica no total do dia. O ROI Face é o que o Gerenciador mostra (sem imposto e com venda contada em dobro), pra comparar. Marque campanhas (ou toque no nome) pra ver só os anúncios delas. ${d.guards.edit_enabled ? 'Ligar, desligar e mudar orçamento vai direto pro Face e fica no histórico (aba Regras).' : 'Ligar, desligar e mudar orçamento ficam travados até você liberar a edição em Conexões.'}</p></div></div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Nível"><button aria-pressed="${isC}" data-act="cpLevel" data-v="campaign">Campanhas</button><button aria-pressed="${!isC}" data-act="cpLevel" data-v="ad">Anúncios</button></div>
     <button class="chip" data-act="cpActive">${ic(cp.active ? 'check' : 'list')}${cp.active ? 'Só ativas ou que gastaram' : 'Todas'}</button>
+    ${selN ? (isC ? `<button class="chip chip-on" data-act="cpSeeAds">${ic('image')}Ver anúncios de ${esc(selName)}</button><button class="linkbtn" data-act="cpClear">${ic('x')}Limpar seleção</button>`
+      : `<span class="chip chip-on">${ic('list')}Anúncios de: ${esc(selName)}<button class="chip-x" data-act="cpClear" aria-label="Mostrar todos os anúncios">${ic('x')}</button></span>`) : ''}
     <span class="faint" style="font-size:12.5px;margin-left:auto">${rows.length} ${isC ? 'campanhas' : 'anúncios'} · ordenado por gasto</span>
   </div>
-  <div class="card"><div class="tbl-wrap">${rows.length ? `<table><thead><tr><th>${isC ? 'Campanha' : 'Anúncio'}</th><th>Ligada</th><th>No ar há</th>${isC ? '<th>Orçamento/dia</th>' : ''}<th>Gasto</th><th>CPM</th><th>CTR</th><th>Freq.</th><th>Vendas Face</th><th>Vendas reais</th><th>Custo/venda real</th><th>ROI real</th><th style="text-align:left">7 dias</th><th>Sinal</th></tr></thead><tbody>
-    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}"><td class="txt"><div class="cname">${esc(c.name)}<small>${c.bm_name ? `<span class="bm-tag">${esc(c.bm_name)}</span>` : ''}${c.account_status != null && c.account_status !== 1 ? '<span class="bm-tag down-tag">conta caiu</span>' : ''}${esc(isC ? (c.account_name || '') : (c.account_name || '') + ' · ' + (c.campaign_name || ''))}</small></div></td>
+  <div class="card"><div class="tbl-wrap">${rows.length ? `<table><thead><tr>${isC ? `<th class="selc"><button class="check" role="checkbox" aria-checked="${allSel}" data-act="cpSelAll" aria-label="Marcar todas">${allSel ? ic('check') : ''}</button></th>` : ''}<th>${isC ? 'Campanha' : 'Anúncio'}</th><th>Ligada</th><th>No ar há</th>${isC ? '<th>Orçamento/dia</th>' : ''}<th>Gasto</th><th>CPM</th><th>CTR</th><th>Freq.</th><th>Vendas Face</th><th>Vendas reais</th><th>Custo/venda real</th><th>Faturamento real</th><th>ROI real</th><th title="Valor de compra ÷ gasto, como o Gerenciador mostra: sem imposto e com venda contada em dobro">ROI Face</th><th style="text-align:left">7 dias</th><th>Sinal</th></tr></thead><tbody>
+    ${rows.map((c, i) => `<tr style="${c.status !== 'ACTIVE' ? 'opacity:.6' : ''}">${isC ? `<td class="selc"><button class="check" role="checkbox" aria-checked="${cp.sel.has(c.id)}" data-act="cpSel" data-i="${i}" aria-label="Marcar ${esc(c.name)}">${cp.sel.has(c.id) ? ic('check') : ''}</button></td>` : ''}<td class="txt"><div class="${isC ? '' : 'adrow'}">${isC ? '' : `<button class="adthumb" style="background-image:${thumbBg({ thumb: c.thumb_url, key: c.id })}" data-act="cpThumb" data-i="${i}" aria-label="Ver o criativo de ${esc(c.name)}"></button>`}<div class="cname">${isC ? `<button class="cname-btn" data-act="cpOpen" data-i="${i}" title="Ver os anúncios desta campanha">${esc(c.name)}</button>` : esc(c.name)}<small>${c.bm_name ? `<span class="bm-tag">${esc(c.bm_name)}</span>` : ''}${c.account_status != null && c.account_status !== 1 ? '<span class="bm-tag down-tag">conta caiu</span>' : ''}${esc(isC ? (c.account_name || '') : (c.account_name || '') + ' · ' + (c.campaign_name || ''))}</small></div></div></td>
       <td><button class="tog" role="switch" aria-checked="${c.status === 'ACTIVE'}" data-act="tog" data-i="${i}" aria-label="Ligar ou desligar ${esc(c.name)}"></button></td>
       <td class="${c.days_on >= 12 ? 'w' : ''}">${c.days_on == null ? '—' : c.days_on + (c.days_on === 1 ? ' dia' : ' dias')}</td>
       ${isC ? `<td>${c.budget ? `<button class="budget" data-act="bud" data-i="${i}">${brl(c.budget)} ${ic('edit')}</button>` : '<span class="faint">—</span>'}</td>` : ''}
       <td>${brl(c.spend, 2)}</td><td>${c.impressions ? brl(c.cpm, 2) : '—'}</td><td>${c.impressions ? pct(c.ctr) : '—'}</td><td class="${c.frequency >= 3 ? 'w' : ''}">${c.frequency ? nf(c.frequency, 1) : '—'}</td>
-      <td class="face-v">${nf(c.fb_purchases)}</td><td class="real-v">${nf(c.sales)}</td><td>${c.cpa ? brl(c.cpa, 2) : '—'}</td><td class="real-v">${c.spend ? f2(c.roi) : '—'}</td>
+      <td class="face-v">${nf(c.fb_purchases)}</td><td class="real-v">${nf(c.sales)}</td><td>${c.cpa ? brl(c.cpa, 2) : '—'}</td><td class="real-v">${c.revenue ? brl(c.revenue, 2) : '—'}</td><td class="real-v">${c.spend ? f2(c.roi) : '—'}</td><td class="face-v">${c.spend ? f2(c.roi_face) : '—'}</td>
       <td style="width:128px">${days7Chart(c.days7)}</td>
       <td><span class="pill p-${SIG[c.signal][0]}">${SIG[c.signal][1]}</span></td></tr>`).join('')}
   </tbody>${campTotals(rows, d, isC)}</table>` : `<div class="empty">${ic('list')}Nenhuma ${isC ? 'campanha' : 'anúncio'} nesse período.</div>`}</div></div>
@@ -705,9 +711,10 @@ function campTotals(rows, d, isC) {
   const sp = S('spend'), im = S('impressions'), cl = S('clicks'), sa = S('sales'), rv = S('revenue');
   const fq = im ? rows.reduce((a, c) => a + (c.frequency || 0) * (c.impressions || 0), 0) / im : 0;
   const roi = div(rv, sp * (1 + (d.tax_pct ?? 12.15) / 100));
-  return `<tfoot><tr class="tot"><td class="txt"><b>Total</b><small class="faint" style="display:block">${rows.length} ${isC ? 'campanhas' : 'anúncios'}</small></td><td></td><td></td>${isC ? `<td title="Só das ligadas">${brl(rows.filter(c => c.status === 'ACTIVE').reduce((a, c) => a + (Number(c.budget) || 0), 0))}</td>` : ''}
+  const fr = S('fb_revenue');
+  return `<tfoot><tr class="tot">${isC ? '<td></td>' : ''}<td class="txt"><b>Total</b><small class="faint" style="display:block">${rows.length} ${isC ? 'campanhas' : 'anúncios'}</small></td><td></td><td></td>${isC ? `<td title="Só das ligadas">${brl(rows.filter(c => c.status === 'ACTIVE').reduce((a, c) => a + (Number(c.budget) || 0), 0))}</td>` : ''}
     <td><b>${brl(sp)}</b></td><td>${im ? brl(sp / im * 1000) : '—'}</td><td>${im ? pct(cl / im * 100) : '—'}</td><td>${fq ? nf(fq, 1) : '—'}</td>
-    <td class="face-v"><b>${nf(S('fb_purchases'))}</b></td><td class="real-v"><b>${nf(sa)}</b></td><td>${sa ? brl(sp / sa) : '—'}</td><td class="real-v"><b>${sp ? f2(roi) : '—'}</b></td><td></td><td></td></tr></tfoot>`;
+    <td class="face-v"><b>${nf(S('fb_purchases'))}</b></td><td class="real-v"><b>${nf(sa)}</b></td><td>${sa ? brl(sp / sa) : '—'}</td><td class="real-v"><b>${rv ? brl(rv, 2) : '—'}</b></td><td class="real-v"><b>${sp ? f2(roi) : '—'}</b></td><td class="face-v"><b>${sp ? f2(fr / sp) : '—'}</b></td><td></td><td></td></tr></tfoot>`;
 }
 // 7 casinhas (uma por dia): linha do ROI real com bolinha por dia; tracejado = meta
 function days7Chart(days) {
@@ -1178,6 +1185,15 @@ const ACT = {
   cpPeriod(el) { cp.period = el.dataset.v; viewCamp(); },
   cpLevel(el) { cp.level = el.dataset.v; viewCamp(); },
   cpActive() { cp.active = !cp.active; viewCamp(); },
+  cpSel(el) { const c = campRows[+el.dataset.i]; cp.sel.has(c.id) ? cp.sel.delete(c.id) : cp.sel.set(c.id, c.name); viewCamp(); },
+  cpSelAll(el) { const all = el.getAttribute('aria-checked') === 'true'; campRows.forEach(c => all ? cp.sel.delete(c.id) : cp.sel.set(c.id, c.name)); viewCamp(); },
+  cpOpen(el) { const c = campRows[+el.dataset.i]; cp.sel = new Map([[c.id, c.name]]); cp.level = 'ad'; viewCamp(); },
+  cpSeeAds() { cp.level = 'ad'; viewCamp(); },
+  cpClear() { cp.sel.clear(); viewCamp(); },
+  cpThumb(el) {
+    const c = campRows[+el.dataset.i];
+    sheet({ title: esc(c.name), noOk: true, body: c.thumb_url ? `<img src="${esc(c.thumb_url)}" alt="Criativo de ${esc(c.name)}" style="width:100%;border-radius:12px;display:block">` : '<p>O Face ainda não mandou a imagem deste anúncio. Ela aparece depois da próxima leitura completa.</p>' });
+  },
   crFilter(el) { crFilter = el.dataset.v; viewCre(); },
   abToggle() { abOpen = !abOpen; drawAlertBar(); },
   async abOk() { const ids = AB.map(a => a.id); store.set('argos-alert-seen', Math.max(...ids)); AB = []; abOpen = false; drawAlertBar(); await api('/alerts/dismiss', { body: { ids } }); },
